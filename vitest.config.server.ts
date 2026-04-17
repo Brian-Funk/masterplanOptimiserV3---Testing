@@ -12,11 +12,21 @@ const SERVER_WEB = path.resolve(
 );
 
 export default defineConfig({
+  esbuild: {
+    jsx: "automatic",
+    jsxImportSource: "react",
+  },
   resolve: {
     alias: {
       "@": path.join(SERVER_WEB, "src"),
       react: path.resolve(__dirname, "node_modules/react"),
       "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+      next: path.resolve(__dirname, "node_modules/next"),
+      "@simplewebauthn/browser": path.resolve(
+        __dirname,
+        "node_modules/@simplewebauthn/browser",
+      ),
+      "lucide-react": path.resolve(__dirname, "node_modules/lucide-react"),
     },
   },
   test: {

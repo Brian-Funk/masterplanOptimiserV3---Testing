@@ -1,0 +1,193 @@
+/**
+ * Tests for DeleteMyDataLink component — GDPR data deletion request.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import React from "react";
+
+// Mock environment
+vi.mock("@/lib/environment", () => ({
+  getApiUrl: () => "https://api.test",
+}));
+
+// Mock AuthContext
+let mockIsAuthenticated = true;
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ isAuthenticated: mockIsAuthenticated }),
+}));
+
+// Mock fetch
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+// CSRF cookie
+Object.defineProperty(document, "cookie", {
+  writable: true,
+  value: "csrf_token=test-csrf",
+});
+
+// Mock lucide-react
+vi.mock("lucide-react", () => ({
+  X: (props: Record<string, unknown>) =>
+    React.createElement("svg", { "data-testid": "x-icon", ...props }),
+  AlertTriangle: (props: Record<string, unknown>) =>
+    React.createElement("svg", { "data-testid": "alert-icon", ...props }),
+}));
+
+import { DeleteMyDataLink } from "@/components/DeleteMyDataLink";
+
+beforeEach(() => {
+  mockFetch.mockReset();
+  mockIsAuthenticated = true;
+});
+
+describe("DeleteMyDataLink", () => {
+  it("renders delete button when authenticated", () => {
+    render(<DeleteMyDataLink />);
+    expect(screen.getByText("Delete my data")).toBeInTheDocument();
+  });
+
+  it("renders nothing when not authenticated", () => {
+    mockIsAuthenticated = false;
+    const { container } = render(<DeleteMyDataLink />);
+    expect(container.textContent).toBe("");
+  });
+
+  it("opens modal on click", async () => {
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+
+    expect(screen.getByText("Request Data Deletion")).toBeInTheDocument();
+    expect(screen.getByText(/GDPR Article 17/)).toBeInTheDocument();
+  });
+
+  it("modal has cancel and submit buttons", async () => {
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+
+    expect(screen.getByText("Cancel")).toBeInTheDocument();
+    expect(screen.getByText("Submit Deletion Request")).toBeInTheDocument();
+  });
+
+  it("closes modal on cancel", async () => {
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    expect(screen.getByText("Request Data Deletion")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Cancel"));
+    expect(screen.queryByText("Request Data Deletion")).toBeNull();
+  });
+
+  it("closes modal on close button", async () => {
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    expect(screen.getByText("Request Data Deletion")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /close/i }));
+    expect(screen.queryByText("Request Data Deletion")).toBeNull();
+  });
+
+  it("submits deletion request successfully", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true });
+
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    await user.click(screen.getByText("Submit Deletion Request"));
+
+    await waitFor(() => {
+      // After success, the whole component should disappear (submitted state)
+      expect(screen.queryByText("Delete my data")).toBeNull();
+      expect(screen.queryByText("Request Data Deletion")).toBeNull();
+    });
+  });
+
+  it("shows error on failed submission", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ detail: "Already requested" }),
+    });
+
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    await user.click(screen.getByText("Submit Deletion Request"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Already requested")).toBeInTheDocument();
+    });
+  });
+
+  it("shows generic error when response has no detail", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => {
+        throw new Error("no json");
+      },
+    });
+
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    await user.click(screen.getByText("Submit Deletion Request"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Something went wrong. Please try again."),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows network error message", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    await user.click(screen.getByText("Submit Deletion Request"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Network error. Please try again."),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows loading state during submission", async () => {
+    // Never-resolving fetch to keep loading state
+    mockFetch.mockImplementation(() => new Promise(() => {}));
+
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+    await user.click(screen.getByText("Submit Deletion Request"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Submitting…")).toBeInTheDocument();
+    });
+  });
+
+  it("displays explanation steps in the modal", async () => {
+    const user = userEvent.setup();
+    render(<DeleteMyDataLink />);
+
+    await user.click(screen.getByText("Delete my data"));
+
+    expect(screen.getByText(/permanently anonymised/)).toBeInTheDocument();
+    expect(screen.getByText(/administrator is notified/)).toBeInTheDocument();
+  });
+});

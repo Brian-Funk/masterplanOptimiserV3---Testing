@@ -12,6 +12,10 @@ const DESKTOP_WEB = path.resolve(
 );
 
 export default defineConfig({
+  esbuild: {
+    jsx: "automatic",
+    jsxImportSource: "react",
+  },
   resolve: {
     alias: {
       "@": path.join(DESKTOP_WEB, "src"),

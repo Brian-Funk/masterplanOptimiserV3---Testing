@@ -40,6 +40,48 @@ describe("Button", () => {
     rerender(<Button size="lg">L</Button>);
     expect(screen.getByRole("button").className).toContain("px-6");
   });
+
+  it("applies primary variant inline style", () => {
+    render(<Button variant="primary">P</Button>);
+    expect(screen.getByRole("button").style.backgroundColor).toBe(
+      "var(--color-primary)",
+    );
+  });
+
+  it("applies danger variant inline style", () => {
+    render(<Button variant="danger">D</Button>);
+    expect(screen.getByRole("button").style.backgroundColor).toBe(
+      "var(--color-error)",
+    );
+  });
+
+  it("applies outline variant class", () => {
+    render(<Button variant="outline">O</Button>);
+    expect(screen.getByRole("button").className).toContain("border-2");
+  });
+
+  it("applies ghost variant class", () => {
+    render(<Button variant="ghost">G</Button>);
+    expect(screen.getByRole("button").className).toContain(
+      "text-foreground-secondary",
+    );
+  });
+
+  it("merges custom className", () => {
+    render(<Button className="ml-2">Custom</Button>);
+    expect(screen.getByRole("button").className).toContain("ml-2");
+  });
+
+  it("does not fire onClick when disabled", () => {
+    const onClick = vi.fn();
+    render(
+      <Button onClick={onClick} disabled>
+        No
+      </Button>,
+    );
+    fireEvent.click(screen.getByRole("button"));
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });
 
 describe("Card", () => {

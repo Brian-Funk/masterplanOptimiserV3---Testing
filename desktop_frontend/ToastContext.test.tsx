@@ -1,9 +1,8 @@
 /**
  * Tests for ToastContext — notification management.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import React from "react";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
 
@@ -37,28 +36,29 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("ToastContext", () => {
-  it("adds a toast", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("adds a toast", () => {
     renderWithToast();
-    await user.click(screen.getByText("Add"));
+    fireEvent.click(screen.getByText("Add"));
     expect(screen.getByText(/success: Hello/)).toBeInTheDocument();
   });
 
-  it("removes a toast manually", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("removes a toast manually", () => {
     renderWithToast();
-    await user.click(screen.getByText("Add"));
+    fireEvent.click(screen.getByText("Add"));
     expect(screen.getByText(/success: Hello/)).toBeInTheDocument();
 
-    await user.click(screen.getByText("x"));
+    fireEvent.click(screen.getByText("x"));
     expect(screen.queryByText(/success: Hello/)).toBeNull();
   });
 
-  it("auto-dismisses after 4 seconds", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("auto-dismisses after 4 seconds", () => {
     renderWithToast();
-    await user.click(screen.getByText("Add"));
+    fireEvent.click(screen.getByText("Add"));
     expect(screen.getByText(/success: Hello/)).toBeInTheDocument();
 
     act(() => {
@@ -68,11 +68,10 @@ describe("ToastContext", () => {
     expect(screen.queryByText(/success: Hello/)).toBeNull();
   });
 
-  it("supports multiple toasts", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it("supports multiple toasts", () => {
     renderWithToast();
-    await user.click(screen.getByText("Add"));
-    await user.click(screen.getByText("Error"));
+    fireEvent.click(screen.getByText("Add"));
+    fireEvent.click(screen.getByText("Error"));
 
     expect(screen.getByText(/success: Hello/)).toBeInTheDocument();
     expect(screen.getByText(/error: Oops/)).toBeInTheDocument();

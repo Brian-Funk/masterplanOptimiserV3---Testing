@@ -1,0 +1,12 @@
+[project]
+name = "masterplan-testing"
+version = "0.1.0"
+description = "Automated test suite for MasterplanOptimiserV3"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["server_backend", "desktop_backend"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

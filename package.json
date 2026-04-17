@@ -1,0 +1,27 @@
+{
+  "name": "masterplan-optimiser-testing",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:server": "vitest run --config vitest.config.server.ts",
+    "test:desktop": "vitest run --config vitest.config.desktop.ts",
+    "test:all": "npm run test:server && npm run test:desktop",
+    "test:server:watch": "vitest --config vitest.config.server.ts",
+    "test:desktop:watch": "vitest --config vitest.config.desktop.ts"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "jsdom": "^25.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5",
+    "vitest": "^2.1.8",
+    "next": "14.0.4",
+    "@simplewebauthn/browser": "^13.2.2",
+    "lucide-react": "^0.555.0"
+  }
+}

@@ -69,6 +69,7 @@ def test_import_roundtrip(db, client):
     # Setup data
     tt = create_test_task_type(db, name="Workshop")
     event = create_test_event(db, name="Original")
+    event_id = event.id
     loc = create_test_location(db, event.id, name="Hall A")
     create_test_person(db, event.id, "Alice", "W", loc.id)
     create_test_task(db, event.id, tt.id, title="Opening")
@@ -79,8 +80,8 @@ def test_import_roundtrip(db, client):
     exported = r_export.json()
 
     # Delete the event
-    client.delete(f"/api/v1/events/{event.id}")
-    r_check = client.get(f"/api/v1/events/{event.id}")
+    client.delete(f"/api/v1/events/{event_id}")
+    r_check = client.get(f"/api/v1/events/{event_id}")
     assert r_check.status_code == 404
 
     # Import

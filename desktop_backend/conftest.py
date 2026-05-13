@@ -2,16 +2,19 @@
 Desktop backend test fixtures.
 
 Overrides the FastAPI app's database to use SQLite in-memory,
-provides an authenticated httpx Client with the desktop auth token.
+provides an authenticated FastAPI TestClient with the desktop auth token.
 """
 import os
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Generator
 
 import pytest
-from sqlalchemy import create_engine, event as sa_event
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event as sa_event, text
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 
 # ── Add desktop backend + compute/src to sys.path ──
 _THIS_DIR = Path(__file__).resolve().parent
@@ -44,7 +47,7 @@ from app.models.location import Location
 from app.models.person import Person
 from app.models.task import Task, TaskType
 
-from httpx import ASGITransport, Client
+ 
 
 
 # ── Test database engine (SQLite in-memory) ──
@@ -52,6 +55,7 @@ from httpx import ASGITransport, Client
 _test_engine = create_engine(
     "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 
 
@@ -67,15 +71,36 @@ TestingSessionLocal = sessionmaker(
 )
 
 
+def _create_legacy_tables() -> None:
+    """Create legacy tables still referenced by cleanup SQL but not mapped."""
+    with _test_engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS task_descriptions "
+            "(id INTEGER PRIMARY KEY, event_id INTEGER, task_id INTEGER, content TEXT)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS attachments "
+            "(id INTEGER PRIMARY KEY, event_id INTEGER, filename TEXT)"
+        ))
+
+
+def _drop_legacy_tables() -> None:
+    with _test_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS attachments"))
+        conn.execute(text("DROP TABLE IF EXISTS task_descriptions"))
+
+
 @pytest.fixture(autouse=True)
 def db() -> Generator[Session, None, None]:
     """Create all tables before each test, drop after."""
     Base.metadata.create_all(bind=_test_engine)
+    _create_legacy_tables()
     session = TestingSessionLocal()
     try:
         yield session
     finally:
         session.close()
+        _drop_legacy_tables()
         Base.metadata.drop_all(bind=_test_engine)
 
 
@@ -95,26 +120,28 @@ def _override_db(db: Session):
 # ── Authenticated client ──
 
 @pytest.fixture
-def client() -> Client:
-    """httpx Client with the desktop auth token header."""
-    return Client(
-        transport=ASGITransport(app=app),
+def client() -> Generator[TestClient, None, None]:
+    """TestClient with the desktop auth token header."""
+    with TestClient(
+        app,
         base_url="http://localhost",
         headers={
             "x-desktop-token": _TEST_TOKEN,
             "Content-Type": "application/json",
         },
-    )
+    ) as test_client:
+        yield test_client
 
 
 @pytest.fixture
-def unauth_client() -> Client:
-    """httpx Client WITHOUT the desktop auth token (for testing auth)."""
-    return Client(
-        transport=ASGITransport(app=app),
+def unauth_client() -> Generator[TestClient, None, None]:
+    """TestClient WITHOUT the desktop auth token for testing auth."""
+    with TestClient(
+        app,
         base_url="http://localhost",
         headers={"Content-Type": "application/json"},
-    )
+    ) as test_client:
+        yield test_client
 
 
 # ── Factory helpers ──
@@ -124,8 +151,8 @@ def create_test_event(db: Session, name: str = "Test Event") -> Event:
     event = Event(
         name=name,
         location="Test Location",
-        start_date="2026-08-01",
-        end_date="2026-08-10",
+        start_date=date(2026, 8, 1),
+        end_date=date(2026, 8, 10),
         status="draft",
     )
     db.add(event)

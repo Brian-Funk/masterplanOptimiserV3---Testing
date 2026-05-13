@@ -30,12 +30,15 @@ def test_list_jobs_empty(db, client):
 
     r = client.get(f"/api/v1/optimize/jobs?event_id={event.id}")
     assert r.status_code == 200
-    assert r.json() == []
+    data = r.json()
+    assert data["jobs"] == []
+    assert data["running_job"] is None
 
 
 def test_get_job_not_found(db, client):
     """Get non-existent job → 404."""
-    r = client.get("/api/v1/optimize/jobs/99999")
+    event = create_test_event(db, name="No Matching Job")
+    r = client.get(f"/api/v1/optimize/jobs/99999?event_id={event.id}")
     assert r.status_code == 404
 
 

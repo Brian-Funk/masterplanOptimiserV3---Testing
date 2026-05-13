@@ -83,10 +83,11 @@ def test_update_event(db, client):
 def test_delete_event(db, client):
     """DELETE /api/v1/events/{id} removes the event."""
     event = create_test_event(db, name="To Delete")
-    r = client.delete(f"/api/v1/events/{event.id}")
+    event_id = event.id
+    r = client.delete(f"/api/v1/events/{event_id}")
     assert r.status_code == 200
 
-    r2 = client.get(f"/api/v1/events/{event.id}")
+    r2 = client.get(f"/api/v1/events/{event_id}")
     assert r2.status_code == 404
 
 
@@ -241,17 +242,18 @@ def test_get_task_not_found(db, client):
 def test_delete_event_cascades(db, client):
     """Deleting an event also deletes its tasks and persons."""
     event = create_test_event(db)
+    event_id = event.id
     loc = create_test_location(db, event.id)
     tt = create_test_task_type(db)
     create_test_person(db, event.id, "Jane", "Doe", loc.id)
     create_test_task(db, event.id, tt.id, title="Task")
 
-    client.delete(f"/api/v1/events/{event.id}")
+    client.delete(f"/api/v1/events/{event_id}")
 
-    r_tasks = client.get(f"/api/v1/tasks/?event_id={event.id}")
+    r_tasks = client.get(f"/api/v1/tasks/?event_id={event_id}")
     assert r_tasks.status_code == 200
     assert len(r_tasks.json()) == 0
 
-    r_persons = client.get(f"/api/v1/persons/?event_id={event.id}")
+    r_persons = client.get(f"/api/v1/persons/?event_id={event_id}")
     assert r_persons.status_code == 200
     assert len(r_persons.json()) == 0

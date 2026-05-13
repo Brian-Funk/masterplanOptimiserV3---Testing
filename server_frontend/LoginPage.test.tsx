@@ -269,7 +269,7 @@ describe("LoginPage", () => {
     const { default: LoginPage } = await import("@/app/login/page");
     render(<LoginPage />);
 
-    // Should not redirect — stays on login
+    // Should not redirect - stays on login.
     await waitFor(() => {
       expect(
         screen.getByRole("button", { name: /sign in with passkey/i }),

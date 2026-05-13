@@ -1,15 +1,12 @@
 """Tests for the desktop-to-server publish endpoint."""
-from server_backend.conftest import create_test_event, create_test_user
+from fastapi.testclient import TestClient
 
-from httpx import ASGITransport, Client
+from server_backend.conftest import _raw_client, create_test_event
 
 
-def _publish_client(bearer_token: str) -> Client:
-    """Create a client with Bearer token auth (no session cookies)."""
-    from app.main import app
-    return Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
+def _publish_client(bearer_token: str) -> TestClient:
+    """Create a client with Bearer token auth and no session cookies."""
+    return _raw_client(
         headers={
             "Authorization": f"Bearer {bearer_token}",
             "Content-Type": "application/json",
@@ -34,7 +31,7 @@ _MINIMAL_PAYLOAD = {
 
 
 def test_publish_valid_token(db):
-    """Publish with valid Bearer token → 200."""
+    """Publish with valid Bearer token returns 200."""
     event, secret = create_test_event(db, name="Pub Evt")
     client = _publish_client(secret)
 
@@ -46,7 +43,7 @@ def test_publish_valid_token(db):
 
 
 def test_publish_invalid_token(db):
-    """Publish with invalid Bearer token → 401."""
+    """Publish with invalid Bearer token returns 401."""
     create_test_event(db, name="Pub Evt")
     client = _publish_client("invalid-secret-token")
 
@@ -55,13 +52,8 @@ def test_publish_invalid_token(db):
 
 
 def test_publish_no_token(db):
-    """Publish without Bearer token → 401."""
-    from app.main import app
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
-        headers={"Content-Type": "application/json"},
-    )
+    """Publish without Bearer token returns 401."""
+    client = _raw_client(headers={"Content-Type": "application/json"})
     r = client.post("/api/v1/publish/publish", json=_MINIMAL_PAYLOAD)
     assert r.status_code == 401
 
@@ -72,7 +64,8 @@ def test_publish_creates_data(db):
     client = _publish_client(secret)
     client.post("/api/v1/publish/publish", json=_MINIMAL_PAYLOAD)
 
-    from app.models.published import PublishedTask, PublishedPerson
+    from app.models.published import PublishedPerson, PublishedTask
+
     tasks = db.query(PublishedTask).filter(
         PublishedTask.event_id == event.id,
     ).all()
@@ -86,14 +79,12 @@ def test_publish_creates_data(db):
 
 
 def test_publish_replaces_existing(db):
-    """Re-publish wipes old data and inserts new."""
+    """Re-publish wipes old data and inserts new data."""
     event, secret = create_test_event(db, name="Replace Evt")
     client = _publish_client(secret)
 
-    # First publish
     client.post("/api/v1/publish/publish", json=_MINIMAL_PAYLOAD)
 
-    # Second publish with different data
     new_payload = {
         "tasks": [
             {
@@ -111,6 +102,7 @@ def test_publish_replaces_existing(db):
     assert r.json()["tasks_created"] == 1
 
     from app.models.published import PublishedTask
+
     tasks = db.query(PublishedTask).filter(
         PublishedTask.event_id == event.id,
     ).all()

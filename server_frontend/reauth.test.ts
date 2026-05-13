@@ -1,5 +1,5 @@
 /**
- * Tests for reauth — passkey re-authentication ceremony & withReauth wrapper.
+ * Tests for reauth - passkey re-authentication ceremony and withReauth wrapper.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 

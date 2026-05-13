@@ -1,5 +1,5 @@
 /**
- * Tests for UI components — Button, Card, Input.
+ * Tests for UI components - Button, Card, Input.
  */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";

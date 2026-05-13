@@ -1,6 +1,11 @@
 """Tests for calendar endpoints."""
+from datetime import datetime, timezone
+
 from server_backend.conftest import (
-    create_test_event, create_test_user, _make_client,
+    _make_client,
+    _raw_client,
+    create_test_event,
+    create_test_user,
 )
 from app.models.published import PublishedTask, PublishedPerson
 
@@ -20,8 +25,8 @@ def _seed_published_data(db, event_id: int):
         event_id=event_id,
         external_task_id=1,
         name="Workshop A",
-        start_datetime="2026-08-01T09:00:00+00:00",
-        end_datetime="2026-08-01T10:00:00+00:00",
+        start_datetime=datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc),
         attendees_json='[{"name": "Jane Doe", "person_id": 1}]',
     )
     db.add(task)
@@ -66,13 +71,7 @@ def test_get_calendar_persons(db):
 
 def test_get_calendar_unauthenticated(db):
     """Calendar endpoint requires authentication."""
-    from httpx import ASGITransport, Client
-    from app.main import app
-
     event, _ = create_test_event(db, name="Unauth Evt")
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
-    )
+    client = _raw_client()
     r = client.get(f"/api/v1/calendar/{event.id}")
     assert r.status_code == 401

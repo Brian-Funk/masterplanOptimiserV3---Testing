@@ -1,4 +1,4 @@
-"""Tests for GDPR endpoints — data export, deletion request, anonymisation."""
+"""Tests for GDPR endpoints - data export, deletion request, anonymisation."""
 from server_backend.conftest import (
     create_test_event, create_test_user, _make_client, inject_session,
 )

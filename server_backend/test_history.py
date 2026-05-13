@@ -29,13 +29,13 @@ def _create_snapshot(db, event_id: int, version: int = 1, frozen: bool = False):
 # ── GET /admin/events/{event_id}/history ──
 
 
-def test_list_snapshots(db, admin_client):
+def test_list_snapshots(db, root_client):
     """Admin can list snapshots for an event."""
     event, _ = create_test_event(db, name="Hist Evt")
     _create_snapshot(db, event.id, version=1)
     _create_snapshot(db, event.id, version=2)
 
-    r = admin_client.get(f"/api/v1/admin/events/{event.id}/history")
+    r = root_client.get(f"/api/v1/admin/events/{event.id}/history")
     assert r.status_code == 200
     data = r.json()
     assert len(data) == 2
@@ -58,34 +58,34 @@ def test_list_snapshots_issuer(db):
 # ── GET /admin/events/{event_id}/history/{version} ──
 
 
-def test_get_snapshot_detail(db, admin_client):
+def test_get_snapshot_detail(db, root_client):
     """Admin can get full snapshot detail."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1)
 
-    r = admin_client.get(f"/api/v1/admin/events/{event.id}/history/1")
+    r = root_client.get(f"/api/v1/admin/events/{event.id}/history/1")
     assert r.status_code == 200
     data = r.json()
     assert data["version"] == 1
     assert "snapshot" in data
 
 
-def test_get_snapshot_not_found(db, admin_client):
-    """Getting non-existent snapshot version → 404."""
+def test_get_snapshot_not_found(db, root_client):
+    """Getting non-existent snapshot version returns 404."""
     event, _ = create_test_event(db, name="Evt")
-    r = admin_client.get(f"/api/v1/admin/events/{event.id}/history/999")
+    r = root_client.get(f"/api/v1/admin/events/{event.id}/history/999")
     assert r.status_code == 404
 
 
 # ── PATCH /admin/events/{event_id}/history/{version} ──
 
 
-def test_patch_snapshot_label(db, admin_client):
+def test_patch_snapshot_label(db, root_client):
     """Admin can set a label on a snapshot."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1)
 
-    r = admin_client.patch(
+    r = root_client.patch(
         f"/api/v1/admin/events/{event.id}/history/1",
         json={"label": "Release 1.0"},
     )
@@ -93,12 +93,12 @@ def test_patch_snapshot_label(db, admin_client):
     assert r.json()["label"] == "Release 1.0"
 
 
-def test_patch_snapshot_freeze(db, admin_client):
+def test_patch_snapshot_freeze(db, root_client):
     """Admin can freeze a snapshot."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1)
 
-    r = admin_client.patch(
+    r = root_client.patch(
         f"/api/v1/admin/events/{event.id}/history/1",
         json={"frozen": True},
     )
@@ -125,21 +125,21 @@ def test_patch_snapshot_issuer_can_label(db):
 # ── DELETE /admin/events/{event_id}/history/{version} ──
 
 
-def test_delete_snapshot_admin_only(db, admin_client):
+def test_delete_snapshot_admin_only(db, root_client):
     """Admin can delete a snapshot."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1)
 
-    r = admin_client.delete(f"/api/v1/admin/events/{event.id}/history/1")
+    r = root_client.delete(f"/api/v1/admin/events/{event.id}/history/1")
     assert r.status_code == 200
 
 
-def test_delete_snapshot_frozen_blocked(db, admin_client):
+def test_delete_snapshot_frozen_blocked(db, root_client):
     """Cannot delete a frozen snapshot."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1, frozen=True)
 
-    r = admin_client.delete(f"/api/v1/admin/events/{event.id}/history/1")
+    r = root_client.delete(f"/api/v1/admin/events/{event.id}/history/1")
     assert r.status_code == 409
 
 

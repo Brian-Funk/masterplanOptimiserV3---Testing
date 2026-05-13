@@ -1,5 +1,5 @@
 /**
- * Tests for DeleteMyDataLink component — GDPR data deletion request.
+ * Tests for DeleteMyDataLink component - GDPR data deletion request.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -177,7 +177,7 @@ describe("DeleteMyDataLink", () => {
     await user.click(screen.getByText("Submit Deletion Request"));
 
     await waitFor(() => {
-      expect(screen.getByText("Submitting…")).toBeInTheDocument();
+      expect(screen.getByText("Submitting...")).toBeInTheDocument();
     });
   });
 

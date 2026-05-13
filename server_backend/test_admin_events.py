@@ -89,6 +89,7 @@ def test_delete_event_cascade(db, reauth_admin_client):
     """Deleting an event cascades to users and published data."""
     event, _ = create_test_event(db, name="Cascade Evt")
     user = create_test_user(db, username="evt_user", event_id=event.id)
+    user_id = user.id
 
     r = reauth_admin_client.delete(f"/api/v1/admin/events/{event.id}")
     assert r.status_code == 200
@@ -96,7 +97,7 @@ def test_delete_event_cascade(db, reauth_admin_client):
 
     # Verify user is gone
     from app.models.user import User
-    remaining = db.query(User).filter(User.id == user.id).first()
+    remaining = db.query(User).filter(User.id == user_id).first()
     assert remaining is None
 
 

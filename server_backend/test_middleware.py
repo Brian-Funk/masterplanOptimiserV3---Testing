@@ -1,28 +1,23 @@
 """Tests for CSRF enforcement and content-type middleware."""
 from server_backend.conftest import (
-    create_test_event, create_test_user, inject_session, _make_client,
+    _raw_client,
+    create_test_event,
+    create_test_user,
+    inject_session,
 )
-
-from httpx import ASGITransport, Client
 
 
 def test_csrf_required_on_write(db):
-    """POST to cookie-authenticated endpoint without CSRF → 403."""
-    from app.main import app
-
+    """POST to cookie-authenticated endpoint without CSRF returns 403."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(
         db, username="csrf_user", is_admin=True, event_id=event.id,
     )
     raw_token, csrf = inject_session(db, user)
 
-    # Client with session cookie but WITHOUT X-CSRF-Token header
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
+    client = _raw_client(
         cookies={"session_id": raw_token, "csrf_token": csrf},
         headers={"Content-Type": "application/json"},
-        # Note: no X-CSRF-Token header
     )
 
     r = client.post("/api/v1/admin/events", json={"name": "CSRF Test"})
@@ -31,28 +26,24 @@ def test_csrf_required_on_write(db):
 
 
 def test_csrf_not_required_on_get(db, admin_client):
-    """GET requests don't need CSRF tokens."""
+    """GET requests do not need CSRF tokens."""
     r = admin_client.get("/api/v1/admin/events")
     assert r.status_code == 200
 
 
 def test_content_type_enforcement(db):
-    """POST to API without application/json content-type → 415."""
-    from app.main import app
-
+    """POST to API without application/json content-type returns 415."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(
         db, username="ct_user", is_admin=True, event_id=event.id,
     )
     raw_token, csrf = inject_session(db, user)
 
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
+    client = _raw_client(
         cookies={"session_id": raw_token, "csrf_token": csrf},
         headers={
             "X-CSRF-Token": csrf,
-            "Content-Type": "text/plain",  # wrong content type
+            "Content-Type": "text/plain",
         },
     )
 
@@ -61,15 +52,11 @@ def test_content_type_enforcement(db):
 
 
 def test_body_size_limit(db):
-    """Request exceeding body size limit → 413."""
-    from app.main import app
-
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
+    """Request exceeding body size limit returns 413."""
+    client = _raw_client(
         headers={
             "Content-Type": "application/json",
-            "Content-Length": str(10 * 1024 * 1024),  # 10MB
+            "Content-Length": str(10 * 1024 * 1024),
         },
     )
 
@@ -80,11 +67,8 @@ def test_body_size_limit(db):
 def test_publish_exempt_from_csrf(db):
     """Publish endpoint uses Bearer token, not CSRF."""
     event, secret = create_test_event(db, name="Evt")
-    from app.main import app
 
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
+    client = _raw_client(
         headers={
             "Authorization": f"Bearer {secret}",
             "Content-Type": "application/json",
@@ -100,12 +84,7 @@ def test_publish_exempt_from_csrf(db):
 
 def test_health_check(db):
     """Health endpoint returns ok."""
-    from app.main import app
-
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
-    )
+    client = _raw_client()
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] in ("ok", "degraded")

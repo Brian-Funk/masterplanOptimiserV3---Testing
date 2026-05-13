@@ -1,27 +1,22 @@
 """Tests for authentication and role-based access control."""
 from server_backend.conftest import (
     create_test_event, create_test_user, inject_session, _make_client,
+    _raw_client,
 )
-
-from httpx import ASGITransport, Client
 
 
 # ── /api/v1/auth/me ──
 
 
 def test_me_returns_401_without_cookie(db):
-    """GET /me without session cookie → 401."""
-    from app.main import app
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
-    )
+    """GET /me without session cookie returns 401."""
+    client = _raw_client()
     r = client.get("/api/v1/auth/me")
     assert r.status_code == 401
 
 
 def test_me_returns_user_with_valid_session(db, root_client):
-    """GET /me with valid session → user data."""
+    """GET /me with valid session returns user data."""
     r = root_client.get("/api/v1/auth/me")
     assert r.status_code == 200
     data = r.json()
@@ -45,9 +40,8 @@ def test_me_returns_issuer_fields(db):
 
 
 def test_me_returns_401_with_expired_session(db):
-    """GET /me with expired session → 401."""
+    """GET /me with expired session returns 401."""
     from datetime import datetime, timedelta, timezone
-    from app.main import app
     from app.models.user import AuthSession
     from app.core.sessions import _hash_token
     import secrets
@@ -68,9 +62,7 @@ def test_me_returns_401_with_expired_session(db):
     db.add(session)
     db.commit()
 
-    client = Client(
-        transport=ASGITransport(app=app),
-        base_url="https://localhost",
+    client = _raw_client(
         cookies={"session_id": raw_token, "csrf_token": csrf},
     )
     r = client.get("/api/v1/auth/me")
@@ -202,7 +194,7 @@ def test_require_same_event_noop_for_admin(db):
 def test_reauth_required_blocks_without_reauth(db, admin_client):
     """Destructive endpoint requires re-authentication."""
     # admin_client does not have reauth_at set
-    # Try to delete an event — requires require_recent_reauth
+    # Try to delete an event that requires recent re-authentication.
     r = admin_client.delete("/api/v1/admin/events/9999")
     assert r.status_code == 403
     assert "Re-authentication required" in r.json().get("detail", "")
@@ -210,7 +202,7 @@ def test_reauth_required_blocks_without_reauth(db, admin_client):
 
 def test_reauth_required_allows_with_reauth(db, reauth_admin_client):
     """Destructive endpoint succeeds with fresh re-authentication."""
-    # Event doesn't exist → 404, but the auth check passes
+    # Event does not exist, so 404 proves the auth check passed.
     r = reauth_admin_client.delete("/api/v1/admin/events/9999")
     assert r.status_code == 404  # past the auth check
 

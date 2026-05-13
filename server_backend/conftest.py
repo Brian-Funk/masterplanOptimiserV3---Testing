@@ -14,6 +14,7 @@ from typing import Generator
 import pytest
 from sqlalchemy import create_engine, event as sa_event
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 
 # ── Add server backend to sys.path ──
 _THIS_DIR = Path(__file__).resolve().parent
@@ -37,8 +38,9 @@ from app.models.notification import PushSubscription, Announcement, ScheduleChan
 from app.models.audit import AuditLog
 from app.models.server_setting import ServerSetting
 from app.core.sessions import _hash_token
+from app.core.rate_limit import limiter
 
-from httpx import ASGITransport, AsyncClient
+from fastapi.testclient import TestClient
 
 
 # ── Test database engine (SQLite in-memory) ──
@@ -46,6 +48,7 @@ from httpx import ASGITransport, AsyncClient
 _test_engine = create_engine(
     "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 
 # Enable foreign keys in SQLite
@@ -64,6 +67,7 @@ TestingSessionLocal = sessionmaker(
 def db() -> Generator[Session, None, None]:
     """Create all tables before each test, drop after. Yields a DB session."""
     Base.metadata.create_all(bind=_test_engine)
+    limiter.reset()
     session = TestingSessionLocal()
     try:
         yield session
@@ -166,19 +170,29 @@ def inject_session(
 
 # ── Pre-authenticated httpx clients ──
 
-from httpx import Client
+Client = TestClient
+
+
+def _raw_client(
+    cookies: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+) -> TestClient:
+    """Build a plain synchronous FastAPI test client."""
+    client = TestClient(app, base_url="https://localhost")
+    if cookies:
+        client.cookies.update(cookies)
+    if headers:
+        client.headers.update(headers)
+    return client
 
 def _make_client(
     db: Session,
     user: User,
     reauth: bool = False,
 ) -> Client:
-    """Build an httpx Client with session + CSRF cookies/headers set."""
+    """Build a client with session and CSRF cookies and headers set."""
     raw_token, csrf_token = inject_session(db, user, reauth=reauth)
-    transport = ASGITransport(app=app)  # type: ignore[arg-type]
-    client = Client(
-        transport=transport,
-        base_url="https://localhost",
+    return _raw_client(
         cookies={
             "session_id": raw_token,
             "csrf_token": csrf_token,
@@ -188,7 +202,6 @@ def _make_client(
             "Content-Type": "application/json",
         },
     )
-    return client
 
 
 @pytest.fixture

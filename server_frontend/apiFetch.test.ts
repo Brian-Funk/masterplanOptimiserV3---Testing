@@ -1,5 +1,5 @@
 /**
- * Tests for the apiFetch wrapper — CSRF, credentials, content-type.
+ * Tests for the apiFetch wrapper - CSRF, credentials, content-type.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 

@@ -17,7 +17,7 @@ vi.mock("next/link", () => ({
   }) => React.createElement("a", { href, ...props }, children),
 }));
 
-// Mock DeleteMyDataLink — it has its own test file
+// Mock DeleteMyDataLink - it has its own test file.
 vi.mock("@/components/DeleteMyDataLink", () => ({
   DeleteMyDataLink: () => null,
 }));

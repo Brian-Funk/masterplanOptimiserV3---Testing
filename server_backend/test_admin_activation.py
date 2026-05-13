@@ -154,6 +154,6 @@ def test_activation_validate_token(db, admin_client):
     token = activation_url.split("token=")[1]
 
     # Validate
-    r2 = admin_client.get(f"/api/v1/activation/validate?token={token}")
-    # Should return user info (200) or the validation response
+    r2 = admin_client.post(f"/api/v1/activation/validate/{token}")
+    # Should return user info (200) or the validation response.
     assert r2.status_code == 200

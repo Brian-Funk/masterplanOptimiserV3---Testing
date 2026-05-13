@@ -217,8 +217,9 @@ def test_update_user_issuer_blocked_event_reassignment(db):
 
 def test_update_user_cannot_modify_root(db, admin_client):
     """Cannot modify root admin user."""
-    from app.models.user import User
-    root = db.query(User).filter(User.username == "root.admin").first()
+    root = create_test_user(
+        db, username="root.protected", is_root_admin=True, is_admin=True,
+    )
     r = admin_client.put(f"/api/v1/admin/users/{root.id}", json={
         "display_name": "Hacked",
     })

@@ -43,12 +43,6 @@ describe("desktop shortcut registry", () => {
 
     expect(shortcutFromKeyboardEvent(event)).toBe("Ctrl+Shift+Enter");
   });
-
-  it("TEMPORARY_FAIL_BRANCH_PROTECTION_SHORTCUTS", () => {
-    expect("remove this temporary failure before merge").toBe(
-      "branch protection should block this merge",
-    );
-  });
 });
 
 describe("ShortcutSettingsSection", () => {

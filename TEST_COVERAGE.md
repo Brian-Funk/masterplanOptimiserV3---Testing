@@ -179,9 +179,9 @@ Data deletion request modal with auth gating.
 
 ### `dateFormat.test.ts` — 7 tests
 
-Date formatting utilities (European DD.MM.YY format).
+Date formatting utilities (Swiss DD.MM.YYYY format).
 
-- formatDateShort formats as DD.MM.YY
+- formatDateShort formats as DD.MM.YYYY
 - formatDateWithWeekday prepends weekday abbreviation
 - formatDateLong uses full weekday name
 - formatDateTime appends HH:MM time

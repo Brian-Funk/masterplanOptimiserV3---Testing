@@ -1,7 +1,7 @@
 # Test Coverage Summary
 
-> **Total: 332 tests across 31 test files - all passing**
-> Server Frontend: 134 tests (12 files) | Desktop Frontend: 198 tests (19 files)
+> **Total: 339 tests across 32 test files - all passing**
+> Server Frontend: 134 tests (12 files) | Desktop Frontend: 205 tests (20 files)
 
 ---
 
@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (198 tests)
+## Desktop Frontend Tests (205 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -216,6 +216,18 @@ Desktop user-data preservation during app updates.
 - Reuses existing database and key paths without overwriting files
 - Passes absolute persistent paths to the backend environment
 - Does not log encryption key contents
+
+### `importPreview.test.tsx` - 7 tests
+
+Safe import preview helpers and modal.
+
+- Builds a blocking validation result for invalid JSON
+- Formats recognised import entity counts
+- Uses application-settings wording when no project records are present
+- Renders project counts, schedule metadata, and the new-project action
+- Disables confirmation when blocking errors exist
+- Shows warnings without blocking the import action
+- Calls confirm, cancel, and choose-another handlers
 
 ### `environment.test.ts` — 3 tests
 

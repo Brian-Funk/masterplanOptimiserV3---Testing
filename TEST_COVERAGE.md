@@ -1,7 +1,7 @@
 # Test Coverage Summary
 
-> **Total: 401 tests across 39 test files - all passing**
-> Server Frontend: 134 tests (12 files) | Desktop Frontend: 214 tests (21 files) | Desktop Backend: 53 tests (6 files)
+> **Total: 406 tests across 40 test files - all passing**
+> Server Frontend: 134 tests (12 files) | Desktop Frontend: 219 tests (22 files) | Desktop Backend: 53 tests (6 files)
 
 ---
 
@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (214 tests)
+## Desktop Frontend Tests (219 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -243,7 +243,17 @@ Publish preview derivation and modal confirmation.
 - Calls confirm and cancel handlers
 - Hides day details while keeping the main confirmation summary
 
-### `environment.test.ts` — 3 tests
+### `presentationModePolish.test.tsx` - 5 tests
+
+Presentation-mode polish for calendar, task detail slides, and navigation.
+
+- Renders presentation calendars without the editing toolbar
+- Passes compact density through the presentation calendar slide
+- Shows readable task detail hierarchy for presentation slides
+- Keeps the presentation task sidebar compact and task-focused
+- Keeps shortcut help available without showing it by default
+
+### `environment.test.ts` - 3 tests
 
 Desktop app detection and API URL resolution.
 

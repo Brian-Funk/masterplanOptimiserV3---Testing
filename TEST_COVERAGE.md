@@ -1,7 +1,7 @@
 # Test Coverage Summary
 
-> **Total: 406 tests across 40 test files - all passing**
-> Server Frontend: 134 tests (12 files) | Desktop Frontend: 219 tests (22 files) | Desktop Backend: 53 tests (6 files)
+> **Total: 416 tests across 42 test files - all passing**
+> Server Frontend: 134 tests (12 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
 
 ---
 
@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (219 tests)
+## Desktop Frontend Tests (223 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -242,6 +242,15 @@ Publish preview derivation and modal confirmation.
 - Disables confirmation when no day is publishable
 - Calls confirm and cancel handlers
 - Hides day details while keeping the main confirmation summary
+
+### `publishStateApi.test.ts` - 4 tests
+
+Backend-backed desktop publish-state API client.
+
+- Fetches publish state from the backend instead of localStorage
+- Saves successful publish metadata with day records
+- Records failed publish metadata for affected days
+- Clears publish metadata through the backend
 
 ### `presentationModePolish.test.tsx` - 5 tests
 
@@ -394,7 +403,7 @@ Optimization job API client (start, poll, list).
 
 ---
 
-## Desktop Backend Tests (53 tests)
+## Desktop Backend Tests (59 tests)
 
 FastAPI desktop backend behaviour, data management, optimisation normalisation, Unicode handling, and MP-Backend publishing.
 
@@ -403,4 +412,5 @@ FastAPI desktop backend behaviour, data management, optimisation normalisation, 
 - `test_mp_backend_publish.py` - 3 tests for selected-day MP-Backend publish scoping, all-event fallback, and invalid date rejection
 - `test_normalizer.py` - 8 tests for time conversion, normalisation, capabilities, unavailability, and fatigue scores
 - `test_optimization.py` - 4 tests for optimisation and job endpoints
+- `test_publish_state.py` - 6 tests for persistent publish state, per-day failures, clearing, event deletion, and missing-event rejection
 - `test_unicode_and_identifier_validation.py` - 3 tests for Unicode names and strict machine-name validation

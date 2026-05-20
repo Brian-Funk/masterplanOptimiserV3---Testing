@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (155 tests)
+## Desktop Frontend Tests (189 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -188,6 +188,15 @@ Date formatting utilities (Swiss DD.MM.YYYY format).
 - Handles various date strings correctly
 - Pads single-digit days and months
 - Handles edge-case dates
+
+### `startupScreen.test.ts` - 7 tests
+
+Desktop startup integrity checklist helper.
+
+- Renders the compact Integrity, Backend, and Interface checklist
+- Shows pending, checking, complete, warning, failed, and skipped states
+- Escapes status and step detail text before rendering
+- Maps running, development, successful, and failed integrity states
 
 ### `environment.test.ts` — 3 tests
 

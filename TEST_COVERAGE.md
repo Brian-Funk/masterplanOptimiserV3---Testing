@@ -1,7 +1,7 @@
 # Test Coverage Summary
 
-> **Total: 289 tests across 25 test files — all passing**  
-> Server Frontend: 134 tests (12 files) | Desktop Frontend: 155 tests (13 files)
+> **Total: 332 tests across 31 test files - all passing**
+> Server Frontend: 134 tests (12 files) | Desktop Frontend: 198 tests (19 files)
 
 ---
 
@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (193 tests)
+## Desktop Frontend Tests (198 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -206,6 +206,16 @@ Packaged desktop Content Security Policy.
 - Allows local backend and Google integration endpoints
 - Does not depend on remote Google font stylesheets
 - Keeps renderer hardening directives enabled
+
+### `userDataPaths.test.ts` - 5 tests
+
+Desktop user-data preservation during app updates.
+
+- Stores persistent data under the stable user-data directory
+- Creates only the data directory before backend startup
+- Reuses existing database and key paths without overwriting files
+- Passes absolute persistent paths to the backend environment
+- Does not log encryption key contents
 
 ### `environment.test.ts` — 3 tests
 

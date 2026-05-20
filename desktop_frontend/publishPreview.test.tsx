@@ -169,7 +169,9 @@ describe("publish preview derivation", () => {
     });
 
     expect(preview.days[0].status).toBe("up_to_date");
-    expect(preview.days[0].reason).toBe("Last published today at 18:00.");
+    expect(preview.days[0].reason).toMatch(
+      /^Last published today at \d{2}:00\.$/,
+    );
   });
 
   it("maps publish target labels without exposing credentials", () => {

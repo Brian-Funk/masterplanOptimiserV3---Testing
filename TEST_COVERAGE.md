@@ -1,7 +1,7 @@
 # Test Coverage Summary
 
-> **Total: 339 tests across 32 test files - all passing**
-> Server Frontend: 134 tests (12 files) | Desktop Frontend: 205 tests (20 files)
+> **Total: 401 tests across 39 test files - all passing**
+> Server Frontend: 134 tests (12 files) | Desktop Frontend: 214 tests (21 files) | Desktop Backend: 53 tests (6 files)
 
 ---
 
@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (205 tests)
+## Desktop Frontend Tests (214 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -228,6 +228,20 @@ Safe import preview helpers and modal.
 - Disables confirmation when blocking errors exist
 - Shows warnings without blocking the import action
 - Calls confirm, cancel, and choose-another handlers
+
+### `publishPreview.test.tsx` - 9 tests
+
+Publish preview derivation and modal confirmation.
+
+- Summarises selected-day publishing without implying full-event publishing
+- Shows ready and skipped days for all-day publishing
+- Blocks publishing when no destination is configured
+- Shows already-published timestamps in local time
+- Maps publish target labels without exposing credentials
+- Renders the calm preview summary and precise publish action
+- Disables confirmation when no day is publishable
+- Calls confirm and cancel handlers
+- Hides day details while keeping the main confirmation summary
 
 ### `environment.test.ts` — 3 tests
 
@@ -367,3 +381,16 @@ Optimization job API client (start, poll, list).
 - getJobStatus throws on HTTP error
 - getJobsForEvent fetches jobs list
 - getJobsForEvent throws on HTTP error
+
+---
+
+## Desktop Backend Tests (53 tests)
+
+FastAPI desktop backend behaviour, data management, optimisation normalisation, Unicode handling, and MP-Backend publishing.
+
+- `test_crud.py` - 21 tests for authentication, events, locations, people, tasks, status updates, and cascade deletion
+- `test_data_management.py` - 14 tests for export, import, preview validation, safe mutation, and optional-table deletion
+- `test_mp_backend_publish.py` - 3 tests for selected-day MP-Backend publish scoping, all-event fallback, and invalid date rejection
+- `test_normalizer.py` - 8 tests for time conversion, normalisation, capabilities, unavailability, and fatigue scores
+- `test_optimization.py` - 4 tests for optimisation and job endpoints
+- `test_unicode_and_identifier_validation.py` - 3 tests for Unicode names and strict machine-name validation

@@ -175,7 +175,7 @@ Data deletion request modal with auth gating.
 
 ---
 
-## Desktop Frontend Tests (189 tests)
+## Desktop Frontend Tests (193 tests)
 
 ### `dateFormat.test.ts` — 7 tests
 
@@ -197,6 +197,15 @@ Desktop startup integrity checklist helper.
 - Shows pending, checking, complete, warning, failed, and skipped states
 - Escapes status and step detail text before rendering
 - Maps running, development, successful, and failed integrity states
+
+### `securityPolicy.test.ts` - 4 tests
+
+Packaged desktop Content Security Policy.
+
+- Allows Next.js inline bootstrap scripts without allowing eval
+- Allows local backend and Google integration endpoints
+- Does not depend on remote Google font stylesheets
+- Keeps renderer hardening directives enabled
 
 ### `environment.test.ts` — 3 tests
 

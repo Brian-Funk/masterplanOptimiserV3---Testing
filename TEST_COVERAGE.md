@@ -1,11 +1,11 @@
 # Test Coverage Summary
 
-> **Total: 524 tests across 55 test files - all passing**
-> Server Frontend: 142 tests (14 files) | Server Backend: 100 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
+> **Total: 526 tests across 55 test files - all passing**
+> Server Frontend: 144 tests (15 files) | Server Backend: 100 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
 
 ---
 
-## Server Frontend Tests (142 tests)
+## Server Frontend Tests (144 tests)
 
 ### `apiFetch.test.ts` — 13 tests
 
@@ -172,6 +172,13 @@ Data deletion request modal with auth gating.
 - Shows network error message
 - Shows loading state during submission
 - Displays explanation steps in the modal
+
+### `webEditTaskMarkers.test.tsx` - 2 tests
+
+Server calendar web-edit task marker styling.
+
+- Uses the desktop-style pencil indicator on calendar tasks
+- Uses the same pencil indicator in the task detail modal
 
 ### `webEditConfidence.test.ts` - 4 tests
 

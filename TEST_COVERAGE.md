@@ -1,13 +1,13 @@
 # Test Coverage Summary
 
-> **Total: 546 tests across 58 test files - all passing**
-> Server Frontend: 158 tests (18 files) | Server Backend: 106 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
+> **Total: 562 tests across 62 test files - all passing**
+> Server Frontend: 174 tests (22 files) | Server Backend: 106 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
 
 ---
 
-## Server Frontend Tests (158 tests)
+## Server Frontend Tests (174 tests)
 
-### `apiFetch.test.ts` — 13 tests
+### `apiFetch.test.ts` - 13 tests
 
 API fetch wrapper with CSRF protection and credentials.
 
@@ -25,7 +25,7 @@ API fetch wrapper with CSRF protection and credentials.
 - Returns the raw Response object
 - Handles empty CSRF cookie gracefully
 
-### `AuthContext.test.tsx` — 12 tests
+### `AuthContext.test.tsx` - 12 tests
 
 Authentication context with user state, roles, logout, and refresh.
 
@@ -42,7 +42,7 @@ Authentication context with user state, roles, logout, and refresh.
 - refreshUser re-fetches and updates context
 - Throws when useAuth is used outside AuthProvider
 
-### `ThemeContext.test.tsx` — 8 tests
+### `ThemeContext.test.tsx` - 8 tests
 
 Dark/light theme toggle with localStorage persistence.
 
@@ -55,7 +55,7 @@ Dark/light theme toggle with localStorage persistence.
 - Respects system dark mode preference
 - Throws when useTheme is used outside ThemeProvider
 
-### `LoginPage.test.tsx` — 9 tests
+### `LoginPage.test.tsx` - 9 tests
 
 Login page with bootstrap detection, passkey auth, and role-based redirects.
 
@@ -69,7 +69,7 @@ Login page with bootstrap detection, passkey auth, and role-based redirects.
 - Button is not disabled by default
 - Stays on login when bootstrap check fails
 
-### `BootstrapPage.test.tsx` — 12 tests
+### `BootstrapPage.test.tsx` - 12 tests
 
 Initial setup page with WebAuthn passkey registration.
 
@@ -86,7 +86,7 @@ Initial setup page with WebAuthn passkey registration.
 - Retries on error
 - Navigates to login from already-done state
 
-### `reauth.test.ts` — 9 tests
+### `reauth.test.ts` - 9 tests
 
 Re-authentication ceremony and 403 retry logic.
 
@@ -100,7 +100,7 @@ Re-authentication ceremony and 403 retry logic.
 - Returns 403 as-is when detail is not reauth-required
 - Propagates reauth error on retry
 
-### `UIComponents.test.tsx` — 31 tests
+### `UIComponents.test.tsx` - 31 tests
 
 Core UI primitives: Button, Card, Input.
 
@@ -108,7 +108,7 @@ Core UI primitives: Button, Card, Input.
 - **Card (5):** renders children, hover class, custom className, no hover class when false, border/background classes
 - **Input (10):** renders with/without label, error message + styling, helper text, hides helper when error present, HTML attributes passthrough, disabled state, error/normal border classes, generated/provided id
 
-### `Logo.test.tsx` — 9 tests
+### `Logo.test.tsx` - 9 tests
 
 Themed logo with light/dark mode, links, and custom colours.
 
@@ -122,7 +122,7 @@ Themed logo with light/dark mode, links, and custom colours.
 - Uses custom colours when provided
 - Falls back to brand colours when custom colours are null
 
-### `ThemeToggle.test.tsx` — 4 tests
+### `ThemeToggle.test.tsx` - 4 tests
 
 Theme toggle button with Moon/Sun icons.
 
@@ -131,7 +131,7 @@ Theme toggle button with Moon/Sun icons.
 - Shows Sun icon in dark mode
 - Calls toggleTheme on click
 
-### `Footer.test.tsx` — 7 tests
+### `Footer.test.tsx` - 7 tests
 
 Page footer with copyright, links, and version.
 
@@ -160,7 +160,7 @@ Server activation campaign derivation helpers.
 - Activation filters
 - Human-readable timestamp formatting
 
-### `AnnouncementBanner.test.tsx` — 8 tests
+### `AnnouncementBanner.test.tsx` - 8 tests
 
 Announcement banner with fetch, dismiss, and sessionStorage persistence.
 
@@ -173,7 +173,7 @@ Announcement banner with fetch, dismiss, and sessionStorage persistence.
 - Loads previously dismissed IDs from sessionStorage
 - Does not fetch when eventId is 0
 
-### `DeleteMyDataLink.test.tsx` — 12 tests
+### `DeleteMyDataLink.test.tsx` - 12 tests
 
 Data deletion request modal with auth gating.
 
@@ -246,7 +246,7 @@ FastAPI server backend behaviour for activation, admin operations, calendar data
 
 ## Desktop Frontend Tests (223 tests)
 
-### `dateFormat.test.ts` — 7 tests
+### `dateFormat.test.ts` - 7 tests
 
 Date formatting utilities (Swiss DD.MM.YYYY format).
 
@@ -339,7 +339,7 @@ Desktop app detection and API URL resolution.
 - isDesktopApp returns false in browser
 - getApiUrl returns localhost for desktop
 
-### `AuthContext.test.tsx` — 3 tests
+### `AuthContext.test.tsx` - 3 tests
 
 Static local user context (no login needed in desktop).
 
@@ -347,7 +347,7 @@ Static local user context (no login needed in desktop).
 - isLoading is always false
 - Works without a provider (uses default context value)
 
-### `EventContext.test.tsx` — 7 tests
+### `EventContext.test.tsx` - 7 tests
 
 Event selection with API fetching and sessionStorage persistence.
 
@@ -359,7 +359,7 @@ Event selection with API fetching and sessionStorage persistence.
 - Clears stale selection when event no longer exists
 - Throws when useEvent is used outside EventProvider
 
-### `ThemeContext.test.tsx` — 8 tests
+### `ThemeContext.test.tsx` - 8 tests
 
 Theme fetching from API, CSS custom property application, dark mode.
 
@@ -372,7 +372,7 @@ Theme fetching from API, CSS custom property application, dark mode.
 - Skips secondary/tertiary when null
 - Throws when useTheme is used outside ThemeProvider
 
-### `ToastContext.test.tsx` — 5 tests
+### `ToastContext.test.tsx` - 5 tests
 
 Toast notification state management with auto-dismiss.
 
@@ -382,7 +382,7 @@ Toast notification state management with auto-dismiss.
 - Supports multiple toasts
 - Throws when useToast is used outside ToastProvider
 
-### `ToastContainer.test.tsx` — 7 tests
+### `ToastContainer.test.tsx` - 7 tests
 
 Toast notification UI rendering and dismiss interaction.
 
@@ -394,7 +394,7 @@ Toast notification UI rendering and dismiss interaction.
 - Applies info variant styling (bg-blue-600)
 - Calls removeToast when dismiss button is clicked
 
-### `UIComponents.test.tsx` — 19 tests
+### `UIComponents.test.tsx` - 19 tests
 
 Core UI primitives: Button, Card, Modal.
 
@@ -402,7 +402,7 @@ Core UI primitives: Button, Card, Modal.
 - **Card (3):** renders children, hover styles, custom className
 - **Modal (4):** renders when open, hidden when closed, Escape closes, backdrop click closes, content click does not close
 
-### `UIComponentsExtra.test.tsx` — 45 tests
+### `UIComponentsExtra.test.tsx` - 45 tests
 
 Extended UI components: Input, Select, Badge, Spinner, Switch, Divider, IconButton.
 
@@ -414,7 +414,7 @@ Extended UI components: Input, Select, Badge, Spinner, Switch, Divider, IconButt
 - **Divider (2):** renders hr element, custom className
 - **IconButton (7):** renders children, ghost/primary/secondary variants, size classes (sm/md/lg), disabled state, onClick
 
-### `DataTable.test.tsx` — 11 tests
+### `DataTable.test.tsx` - 11 tests
 
 Generic data table with headers, rows, loading, empty states, and double-click.
 
@@ -430,7 +430,7 @@ Generic data table with headers, rows, loading, empty states, and double-click.
 - Uses custom render function
 - Uses string keyExtractor
 
-### `gcalColors.test.ts` — 12 tests
+### `gcalColors.test.ts` - 12 tests
 
 Google Calendar colour palette and utilities.
 
@@ -447,17 +447,17 @@ Google Calendar colour palette and utilities.
 - gcalColorLabel returns label for known ID
 - gcalColorLabel returns fallback for unknown ID
 
-### `calendarTaskUtils.test.ts` — 20 tests
+### `calendarTaskUtils.test.ts` - 20 tests
 
 Time conversion and TaskInstance-to-CalendarTask mapping.
 
-- **minutesToTime (6):** 0→00:00, 60→01:00, 90→01:30, 720→12:00, 1439→23:59, pads single digits
-- **timeToMinutes (5):** 00:00→0, 01:30→90, 12:00→720, 23:59→1439, handles single-digit format
-- **Roundtrip (1):** minutesToTime ↔ timeToMinutes for 9 values
+- **minutesToTime (6):** 0â†’00:00, 60â†’01:00, 90â†’01:30, 720â†’12:00, 1439â†’23:59, pads single digits
+- **timeToMinutes (5):** 00:00â†’0, 01:30â†’90, 12:00â†’720, 23:59â†’1439, handles single-digit format
+- **Roundtrip (1):** minutesToTime â†” timeToMinutes for 9 values
 - **toCalendarTask (6):** basic field mapping, uses final over optimised, template name fallback, multiple persons, undefined times, unknown task type
 - **instancesToCalendarTasks (2):** filters by eventId + optimised/final, empty array
 
-### `optimizationApi.test.ts` — 8 tests
+### `optimizationApi.test.ts` - 8 tests
 
 Optimization job API client (start, poll, list).
 

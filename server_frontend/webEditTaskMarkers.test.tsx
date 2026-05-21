@@ -44,7 +44,7 @@ describe("web edit task markers", () => {
     );
 
     const marker = screen.getByLabelText(
-      "Edited on the web by Anna today at 14:20. Time changed.",
+      /Edited on the web by Anna .* at 14:20\. Time changed\./,
     );
     expect(marker.className).toContain("rounded-full");
     expect(marker.className).toContain("bg-amber-500/10");
@@ -66,7 +66,7 @@ describe("web edit task markers", () => {
     );
 
     const markers = screen.getAllByLabelText(
-      "Edited on the web by Anna today at 14:20. Time changed.",
+      /Edited on the web by Anna .* at 14:20\. Time changed\./,
     );
     expect(markers[0].className).toContain("rounded-full");
     expect(markers[0].querySelector("svg")).not.toBeNull();

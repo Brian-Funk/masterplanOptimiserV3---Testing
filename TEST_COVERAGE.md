@@ -1,11 +1,11 @@
 # Test Coverage Summary
 
-> **Total: 416 tests across 42 test files - all passing**
-> Server Frontend: 134 tests (12 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
+> **Total: 524 tests across 55 test files - all passing**
+> Server Frontend: 142 tests (14 files) | Server Backend: 100 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
 
 ---
 
-## Server Frontend Tests (134 tests)
+## Server Frontend Tests (142 tests)
 
 ### `apiFetch.test.ts` — 13 tests
 
@@ -172,6 +172,42 @@ Data deletion request modal with auth gating.
 - Shows network error message
 - Shows loading state during submission
 - Displays explanation steps in the modal
+
+### `webEditConfidence.test.ts` - 4 tests
+
+Server web-edit confidence helper behaviour.
+
+- Formats human-readable edit timestamps
+- Summarises healthy, review, and unknown web-edit states
+- Describes task-level web edits without exposing raw data
+- Groups review-list items by schedule day
+
+### `WebEditSummaryBar.test.tsx` - 4 tests
+
+Compact admin web-edit operations summary.
+
+- Renders one compact review summary and review action
+- Shows grouped details only after expansion
+- Filters edits to the current user
+- Shows a quiet loading state
+
+---
+
+## Server Backend Tests (100 tests)
+
+FastAPI server backend behaviour for activation, admin operations, calendar data, GDPR, history, notifications, publishing, security, middleware, and web-edit visibility.
+
+- `test_admin_activation.py` - 8 tests for activation links and activation flows
+- `test_admin_events.py` - 9 tests for event creation, listing, deletion, and publish-secret regeneration
+- `test_admin_users.py` - 18 tests for user management and role permissions
+- `test_calendar.py` - 3 tests for calendar data and authentication
+- `test_gdpr.py` - 9 tests for data export and deletion requests
+- `test_history.py` - 12 tests for publish snapshots and history access
+- `test_middleware.py` - 6 tests for security middleware behaviour
+- `test_notifications.py` - 7 tests for announcements and push subscriptions
+- `test_publish.py` - 6 tests for server publish ingestion
+- `test_security.py` - 16 tests for authentication and security controls
+- `test_web_edits.py` - 6 tests for event-level web-edit state, review metadata, issuer access, and calendar task markers
 
 ---
 

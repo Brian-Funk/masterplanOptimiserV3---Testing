@@ -272,3 +272,58 @@ def test_delete_root_admin_blocked(db, reauth_admin_client):
         )
     r = reauth_admin_client.delete(f"/api/v1/admin/users/{root.id}")
     assert r.status_code == 403
+
+
+
+def test_list_users_includes_activation_campaign_metadata(db, root_client):
+    """The Users endpoint exposes safe activation campaign metadata."""
+    event, _ = create_test_event(db, name="Activation Metadata")
+    user = create_test_user(
+        db,
+        username="activation.pending",
+        event_id=event.id,
+        is_activated=False,
+    )
+
+    link = root_client.post(f"/api/v1/admin/users/{user.id}/activation-link")
+    assert link.status_code == 200
+    r = root_client.get("/api/v1/admin/users")
+
+    assert r.status_code == 200
+    data = next(item for item in r.json() if item["id"] == user.id)
+    assert data["has_activation_link"] is True
+    assert data["last_activation_link_created_at"] is not None
+    assert data["last_activation_at"] is None
+
+
+def test_list_users_reports_last_activation_from_used_link(db, root_client):
+    """Used activation links expose last activation time without exposing tokens."""
+    from datetime import datetime, timezone
+    from app.models.user import ActivationLink
+
+    event, _ = create_test_event(db, name="Used Link")
+    user = create_test_user(
+        db,
+        username="activation.used",
+        event_id=event.id,
+        is_activated=True,
+    )
+    db.add(
+        ActivationLink(
+            token_hash="x" * 64,
+            user_id=user.id,
+            purpose="initial_setup",
+            expires_at=datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc),
+            used_at=datetime(2026, 5, 21, 14, 35, tzinfo=timezone.utc),
+            created_by_id=user.id,
+        )
+    )
+    db.commit()
+
+    r = root_client.get("/api/v1/admin/users")
+
+    assert r.status_code == 200
+    data = next(item for item in r.json() if item["id"] == user.id)
+    assert data["has_activation_link"] is False
+    assert data["last_activation_at"] is not None
+    assert "token" not in data

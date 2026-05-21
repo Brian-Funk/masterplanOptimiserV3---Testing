@@ -1,11 +1,11 @@
 # Test Coverage Summary
 
-> **Total: 534 tests across 56 test files - all passing**
-> Server Frontend: 148 tests (16 files) | Server Backend: 104 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
+> **Total: 546 tests across 58 test files - all passing**
+> Server Frontend: 158 tests (18 files) | Server Backend: 106 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
 
 ---
 
-## Server Frontend Tests (148 tests)
+## Server Frontend Tests (158 tests)
 
 ### `apiFetch.test.ts` — 13 tests
 
@@ -143,6 +143,23 @@ Page footer with copyright, links, and version.
 - Renders footer element
 - Renders version placeholder
 
+### `ActivationCampaignCard.test.tsx` - 4 tests
+
+Server activation campaign confidence card.
+
+- No-user state and primary action
+- Progress bar and count row
+- Compact needs-attention list
+- Generate-links action routing
+
+### `activationCampaign.test.ts` - 6 tests
+
+Server activation campaign derivation helpers.
+
+- Empty, blocked, in-progress, and healthy summaries
+- Activation filters
+- Human-readable timestamp formatting
+
 ### `AnnouncementBanner.test.tsx` — 8 tests
 
 Announcement banner with fetch, dismiss, and sessionStorage persistence.
@@ -209,13 +226,13 @@ Compact admin web-edit operations summary.
 
 ---
 
-## Server Backend Tests (104 tests)
+## Server Backend Tests (106 tests)
 
 FastAPI server backend behaviour for activation, admin operations, calendar data, GDPR, history, notifications, publishing, security, middleware, and web-edit visibility.
 
 - `test_admin_activation.py` - 8 tests for activation links and activation flows
 - `test_admin_events.py` - 9 tests for event creation, listing, deletion, and publish-secret regeneration
-- `test_admin_users.py` - 18 tests for user management and role permissions
+- `test_admin_users.py` - 20 tests for user management, activation campaign metadata, and role permissions
 - `test_calendar.py` - 3 tests for calendar data and authentication
 - `test_gdpr.py` - 9 tests for data export and deletion requests
 - `test_history.py` - 12 tests for publish snapshots and history access

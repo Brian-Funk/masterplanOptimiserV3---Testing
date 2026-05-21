@@ -26,6 +26,8 @@ const reviewSummary: WebEditSummary = {
       edited_by: "Anna",
       edited_by_user_id: 7,
       change_summary: ["Time changed"],
+      original_summary: "09:00 - 10:00 · Room A · Anna",
+      current_summary: "09:30 - 10:30 · Room A · Anna",
     },
     {
       task_id: 2,
@@ -38,6 +40,8 @@ const reviewSummary: WebEditSummary = {
       edited_by: "Ben",
       edited_by_user_id: 8,
       change_summary: ["Location changed"],
+      original_summary: "11:00 - 12:00 · Room A · Ben",
+      current_summary: "11:00 - 12:00 · Room B · Ben",
     },
   ],
 };

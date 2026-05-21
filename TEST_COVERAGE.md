@@ -1,11 +1,11 @@
 # Test Coverage Summary
 
-> **Total: 526 tests across 55 test files - all passing**
-> Server Frontend: 144 tests (15 files) | Server Backend: 100 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
+> **Total: 534 tests across 56 test files - all passing**
+> Server Frontend: 148 tests (16 files) | Server Backend: 104 tests (11 files) | Desktop Frontend: 223 tests (23 files) | Desktop Backend: 59 tests (7 files)
 
 ---
 
-## Server Frontend Tests (144 tests)
+## Server Frontend Tests (148 tests)
 
 ### `apiFetch.test.ts` — 13 tests
 
@@ -173,6 +173,15 @@ Data deletion request modal with auth gating.
 - Shows loading state during submission
 - Displays explanation steps in the modal
 
+### `WebEditReviewModal.test.tsx` - 4 tests
+
+Server web-edit review modal and revert actions.
+
+- Review list grouping and original/current comparison
+- Single web-edit revert confirmation and API payload
+- Selected bulk revert payload
+- Permission-aware hiding of revert controls
+
 ### `webEditTaskMarkers.test.tsx` - 2 tests
 
 Server calendar web-edit task marker styling.
@@ -200,7 +209,7 @@ Compact admin web-edit operations summary.
 
 ---
 
-## Server Backend Tests (100 tests)
+## Server Backend Tests (104 tests)
 
 FastAPI server backend behaviour for activation, admin operations, calendar data, GDPR, history, notifications, publishing, security, middleware, and web-edit visibility.
 
@@ -214,7 +223,7 @@ FastAPI server backend behaviour for activation, admin operations, calendar data
 - `test_notifications.py` - 7 tests for announcements and push subscriptions
 - `test_publish.py` - 6 tests for server publish ingestion
 - `test_security.py` - 16 tests for authentication and security controls
-- `test_web_edits.py` - 6 tests for event-level web-edit state, review metadata, issuer access, and calendar task markers
+- `test_web_edits.py` - 10 tests for event-level web-edit state, review metadata, issuer access, calendar task markers, and web-edit revert actions
 
 ---
 

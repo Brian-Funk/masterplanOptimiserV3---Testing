@@ -86,6 +86,8 @@ describe("web edit confidence helpers", () => {
         edited_by: null,
         edited_by_user_id: null,
         change_summary: [],
+        original_summary: "09:00 - 10:00 · Room A · Anna",
+        current_summary: "09:00 - 10:00 · Room A · Anna",
       },
       {
         task_id: 2,
@@ -95,6 +97,8 @@ describe("web edit confidence helpers", () => {
         edited_by: null,
         edited_by_user_id: null,
         change_summary: [],
+        original_summary: "09:00 - 10:00 · Room A · Anna",
+        current_summary: "09:00 - 10:00 · Room A · Anna",
       },
     ]);
 

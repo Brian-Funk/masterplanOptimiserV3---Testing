@@ -516,6 +516,10 @@ describe("Calendar task confidence indicators", () => {
 
     expect(screen.getByLabelText("Edited task")).toBeInTheDocument();
     expect(screen.getByLabelText("Task conflict")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task conflict")).toHaveClass("grid");
+    expect(screen.getByLabelText("Task conflict").querySelector("svg")).toHaveClass(
+      "block",
+    );
     expect(screen.getByText("Edited after optimisation")).toBeInTheDocument();
     expect(screen.getByText("Anna Test is double-booked.")).toBeInTheDocument();
     expect(

@@ -47,6 +47,53 @@ from app.models.location import Location
 from app.models.person import Person
 from app.models.task import Task, TaskType
 
+
+class FakeSecureCredentialStore:
+    """In-memory secure credential store used by desktop backend tests."""
+
+    def __init__(self):
+        self.values: dict[str, str] = {}
+        self.is_available = True
+
+    def available(self) -> bool:
+        return self.is_available
+
+    def get(self, account: str) -> str | None:
+        if not self.is_available:
+            from app.core.secure_credentials import SecureCredentialStoreUnavailable
+
+            raise SecureCredentialStoreUnavailable("OS credential storage is not available.")
+        return self.values.get(account)
+
+    def set(self, account: str, value: str) -> None:
+        if not self.is_available:
+            from app.core.secure_credentials import SecureCredentialStoreUnavailable
+
+            raise SecureCredentialStoreUnavailable("OS credential storage is not available.")
+        if not isinstance(value, str):
+            raise TypeError("Secure credential values must be strings.")
+        self.values[account] = value
+
+    def delete(self, account: str) -> None:
+        if not self.is_available:
+            from app.core.secure_credentials import SecureCredentialStoreUnavailable
+
+            raise SecureCredentialStoreUnavailable("OS credential storage is not available.")
+        self.values.pop(account, None)
+
+
+@pytest.fixture(autouse=True)
+def secure_credential_store():
+    """Use a fake secure store for all desktop backend tests."""
+    from app.core.secure_credentials import set_credential_store_for_tests
+
+    store = FakeSecureCredentialStore()
+    set_credential_store_for_tests(store)
+    try:
+        yield store
+    finally:
+        set_credential_store_for_tests(None)
+
  
 
 

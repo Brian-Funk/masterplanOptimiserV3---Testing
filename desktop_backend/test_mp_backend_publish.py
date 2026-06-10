@@ -106,6 +106,7 @@ def test_mp_backend_publish_without_dates_sends_all_tasks(db, client, monkeypatc
         "Arrival Task",
         "Session Task",
     ]
+    assert "theme" not in payload
 
 
 def test_mp_backend_publish_rejects_invalid_date(client, db):

@@ -143,8 +143,8 @@ def test_delete_snapshot_frozen_blocked(db, root_client):
     assert r.status_code == 409
 
 
-def test_delete_snapshot_issuer_blocked(db):
-    """Issuer cannot delete snapshots (require_admin, not require_admin_or_issuer)."""
+def test_delete_snapshot_issuer_can_delete(db):
+    """Issuer can delete snapshots for their own event."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1)
     issuer = create_test_user(
@@ -153,7 +153,7 @@ def test_delete_snapshot_issuer_blocked(db):
     client = _make_client(db, issuer)
 
     r = client.delete(f"/api/v1/admin/events/{event.id}/history/1")
-    assert r.status_code == 403
+    assert r.status_code == 200
 
 
 # ── POST /admin/events/{event_id}/history/{version}/restore ──
@@ -173,8 +173,47 @@ def test_restore_snapshot_admin_only(db):
     assert r.json()["restored_version"] == 1
 
 
-def test_restore_snapshot_issuer_blocked(db):
-    """Issuer cannot restore snapshots."""
+def test_restore_snapshot_ignores_legacy_logo_colours(db):
+    """Restoring old snapshots does not reapply legacy logo colours."""
+    event, _ = create_test_event(db, name="Evt")
+    event.logo_color_1 = "#111111"
+    event.logo_color_2 = "#222222"
+    snapshot = PublishSnapshot(
+        event_id=event.id,
+        version=1,
+        snapshot_json=json.dumps({
+            "event_meta": {
+                "name": "Restored",
+                "logo_color_1": "#ff0000",
+                "logo_color_2": "#00ff00",
+            },
+            "tasks": [],
+            "persons": [],
+        }),
+        content_hash="legacy-logo",
+        task_count=0,
+        person_count=0,
+        edits_count=0,
+        source="test",
+    )
+    db.add(snapshot)
+    db.commit()
+    admin = create_test_user(
+        db, username="restore_logo_admin", is_admin=True, event_id=event.id,
+    )
+    client = _make_client(db, admin)
+
+    r = client.post(f"/api/v1/admin/events/{event.id}/history/1/restore")
+    assert r.status_code == 200
+
+    db.refresh(event)
+    assert event.name == "Restored"
+    assert event.logo_color_1 == "#111111"
+    assert event.logo_color_2 == "#222222"
+
+
+def test_restore_snapshot_issuer_can_restore(db):
+    """Issuer can restore snapshots for their own event."""
     event, _ = create_test_event(db, name="Evt")
     _create_snapshot(db, event.id, version=1)
     issuer = create_test_user(
@@ -183,4 +222,4 @@ def test_restore_snapshot_issuer_blocked(db):
     client = _make_client(db, issuer)
 
     r = client.post(f"/api/v1/admin/events/{event.id}/history/1/restore")
-    assert r.status_code == 403
+    assert r.status_code == 200

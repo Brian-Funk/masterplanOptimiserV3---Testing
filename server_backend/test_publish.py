@@ -130,3 +130,27 @@ def test_publish_updates_event_metadata(db):
     db.refresh(event)
     assert event.name == "New Name"
     assert event.status == "published"
+
+
+def test_publish_ignores_legacy_logo_theme_payload(db):
+    """Legacy desktop logo colour payloads are accepted but not applied."""
+    event, secret = create_test_event(db, name="Theme Evt")
+    event.logo_color_1 = "#111111"
+    event.logo_color_2 = "#222222"
+    db.commit()
+    client = _publish_client(secret)
+
+    payload = {
+        **_MINIMAL_PAYLOAD,
+        "theme": {
+            "logo_color_1": "#ff0000",
+            "logo_color_2": "#00ff00",
+        },
+    }
+
+    r = client.post("/api/v1/publish/publish", json=payload)
+    assert r.status_code == 200
+
+    db.refresh(event)
+    assert event.logo_color_1 == "#111111"
+    assert event.logo_color_2 == "#222222"

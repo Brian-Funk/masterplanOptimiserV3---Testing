@@ -68,19 +68,9 @@ describe("Logo", () => {
     expect(wrapper?.className).toContain("mt-4");
   });
 
-  it("uses custom colors when provided", () => {
+  it("uses fixed brand colors", () => {
     currentTheme = "light";
-    const { container } = render(<Logo color1="#ff0000" color2="#00ff00" />);
-    const gradientDiv = container.querySelector(
-      ".absolute.inset-0",
-    ) as HTMLElement;
-    expect(gradientDiv.style.background).toContain("#ff0000");
-    expect(gradientDiv.style.background).toContain("#00ff00");
-  });
-
-  it("falls back to brand colors when custom colors are null", () => {
-    currentTheme = "light";
-    const { container } = render(<Logo color1={null} color2={null} />);
+    const { container } = render(<Logo />);
     const gradientDiv = container.querySelector(
       ".absolute.inset-0",
     ) as HTMLElement;

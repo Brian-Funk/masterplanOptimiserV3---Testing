@@ -7,6 +7,13 @@ from app.core.normalizer_optimization import (
     OptimizationLocation,
     OptimizationCapability,
 )
+from app.core.normalizer import (
+    normalize_flow_input,
+    Task as FlowTask,
+    Person as FlowPerson,
+    Location as FlowLocation,
+    Capability as FlowCapability,
+)
 
 
 def test_time_to_minutes_string():
@@ -92,7 +99,7 @@ def test_normalize_person_unavailability():
             last_name="D",
             global_data={
                 "unavailabilities": [
-                    {"start": "08:00", "end": "09:00"},
+                    {"from": "2026-06-10T08:00", "to": "2026-06-10T09:00"},
                 ],
             },
         ),
@@ -100,11 +107,187 @@ def test_normalize_person_unavailability():
     result = normalize_optimization_input(
         tasks=[], persons=persons, locations=[],
         capabilities=[], task_type_fatigue_map={},
+        working_day_date="2026-06-10",
     )
-    # Unavailabilities should be parsed into minute intervals
-    person = result.persons[0]
-    if person.unavailable_intervals:
-        assert person.unavailable_intervals[0] == (480, 540)
+    assert result.persons[0].unavailable_intervals == [(480, 540)]
+
+
+def test_flow_and_optimization_normalizers_scope_dated_unavailability_to_selected_day():
+    global_data = {
+        "unavailabilities": [
+            {"from": "2026-06-10T18:00", "to": "2026-06-10T20:00"},
+        ],
+    }
+
+    optimisation = normalize_optimization_input(
+        tasks=[],
+        persons=[
+            OptimizationPerson(
+                id=1,
+                first_name="Ben",
+                last_name="Evening",
+                global_data=global_data,
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={},
+        working_day_date="2026-06-11",
+    )
+    flow = normalize_flow_input(
+        tasks=[],
+        persons=[
+            FlowPerson(
+                id=1,
+                first_name="Ben",
+                last_name="Evening",
+                global_data=global_data,
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        working_day_date="2026-06-11",
+    )
+
+    assert optimisation.persons[0].unavailable_intervals == []
+    assert flow.persons[0].unavailable_intervals == []
+
+
+def test_flow_and_optimization_normalizers_apply_dated_unavailability_on_matching_day():
+    global_data = {
+        "unavailabilities": [
+            {"from": "2026-06-10T18:00", "to": "2026-06-10T20:00"},
+        ],
+    }
+
+    optimisation = normalize_optimization_input(
+        tasks=[],
+        persons=[
+            OptimizationPerson(
+                id=1,
+                first_name="Katya",
+                last_name="Unavailable",
+                global_data=global_data,
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={},
+        working_day_date="2026-06-10",
+    )
+    flow = normalize_flow_input(
+        tasks=[],
+        persons=[
+            FlowPerson(
+                id=1,
+                first_name="Katya",
+                last_name="Unavailable",
+                global_data=global_data,
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        working_day_date="2026-06-10",
+    )
+
+    assert optimisation.persons[0].unavailable_intervals == [(1080, 1200)]
+    assert flow.persons[0].unavailable_intervals == [(1080, 1200)]
+
+
+def test_unavailability_respects_working_day_boundary_tail():
+    global_data = {
+        "unavailabilities": [
+            {"from": "2026-06-11T01:00", "to": "2026-06-11T02:00"},
+        ],
+    }
+
+    result = normalize_optimization_input(
+        tasks=[],
+        persons=[
+            OptimizationPerson(
+                id=1,
+                first_name="Night",
+                last_name="Tail",
+                global_data=global_data,
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={},
+        working_day_date="2026-06-10",
+        working_day_boundary_offset_hour=4,
+    )
+
+    assert result.persons[0].unavailable_intervals == [(1500, 1560)]
+
+
+def test_overnight_unavailability_is_continuous_for_working_day():
+    result = normalize_optimization_input(
+        tasks=[],
+        persons=[
+            OptimizationPerson(
+                id=1,
+                first_name="Over",
+                last_name="Night",
+                global_data={
+                    "unavailabilities": [
+                        {"from": "2026-06-10T22:00", "to": "2026-06-11T02:00"},
+                    ],
+                },
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={},
+        working_day_date="2026-06-10",
+        working_day_boundary_offset_hour=4,
+    )
+
+    assert result.persons[0].unavailable_intervals == [(1320, 1560)]
+
+
+def test_legacy_unavailable_intervals_and_time_only_entries_still_work():
+    result = normalize_optimization_input(
+        tasks=[],
+        persons=[
+            OptimizationPerson(
+                id=1,
+                first_name="Legacy",
+                last_name="Intervals",
+                global_data={
+                    "unavailable_intervals": [{"start": 480, "end": 540}],
+                    "unavailabilities": [{"start": "18:00", "end": "20:00"}],
+                },
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={},
+        working_day_date="2026-06-10",
+    )
+
+    assert result.persons[0].unavailable_intervals == [(480, 540), (1080, 1200)]
+
+
+def test_invalid_unavailability_is_reported_without_crashing():
+    result = normalize_optimization_input(
+        tasks=[],
+        persons=[
+            OptimizationPerson(
+                id=1,
+                first_name="Invalid",
+                last_name="Entry",
+                global_data={"unavailabilities": [{"from": "", "to": "not-time"}]},
+            )
+        ],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={},
+        working_day_date="2026-06-10",
+    )
+
+    assert result.persons[0].unavailable_intervals == []
+    assert result.errors == ["Person 1: Ignored invalid unavailability entry."]
 
 
 def test_normalize_empty_input():

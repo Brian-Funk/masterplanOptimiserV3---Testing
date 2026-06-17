@@ -36,7 +36,7 @@ describe("performReauth", () => {
     // begin returns options
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ options: JSON.stringify({ challenge: "abc" }) }),
+      json: async () => ({ options: JSON.stringify({ challenge: "abc" }), ceremony_id: 91 }),
     });
     // startAuthentication returns a credential
     mockStartAuthentication.mockResolvedValueOnce({
@@ -61,6 +61,7 @@ describe("performReauth", () => {
     expect(mockFetch.mock.calls[1][0]).toContain("/admin/reauth/complete");
     const completeBody = JSON.parse(mockFetch.mock.calls[1][1].body);
     expect(completeBody.id).toBe("cred-1");
+    expect(completeBody.ceremony_id).toBe(91);
   });
 
   it("throws when begin endpoint fails", async () => {

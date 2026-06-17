@@ -138,7 +138,7 @@ describe("BootstrapPage", () => {
     // begin returns options
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ options: JSON.stringify({ challenge: "abc" }) }),
+      json: async () => ({ options: JSON.stringify({ challenge: "abc" }), ceremony_id: 77 }),
     });
     mockStartRegistration.mockResolvedValueOnce({ id: "cred-1" });
     // complete succeeds
@@ -160,6 +160,10 @@ describe("BootstrapPage", () => {
         screen.getByRole("button", { name: /go to login/i }),
       ).toBeInTheDocument();
     });
+
+    const completeBody = JSON.parse(mockFetch.mock.calls[2][1].body);
+    expect(completeBody.id).toBe("cred-1");
+    expect(completeBody.ceremony_id).toBe(77);
   });
 
   it("navigates to login after successful registration", async () => {

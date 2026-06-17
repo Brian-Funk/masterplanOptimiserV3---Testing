@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 
 // Mock next/navigation
@@ -261,6 +262,65 @@ describe("LoginPage", () => {
       });
       expect(button).not.toBeDisabled();
     });
+  });
+
+
+  it("passes ceremony_id from auth begin to auth complete", async () => {
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ needs_bootstrap: false }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          options: JSON.stringify({ challenge: "auth-challenge" }),
+          ceremony_id: 42,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ exchange_code: "exchange-1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      });
+    vi.mocked(startAuthentication).mockResolvedValueOnce({
+      id: "cred-1",
+      rawId: "cred-1",
+      response: {},
+      type: "public-key",
+    } as never);
+
+    const { default: LoginPage } = await import("@/app/login/page");
+    render(<LoginPage />);
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: /sign in with passkey/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.some(([url]) =>
+          String(url).includes("/api/v1/passkey/auth/complete"),
+        ),
+      ).toBe(true);
+    });
+
+    const completeCall = mockFetch.mock.calls.find(([url]) =>
+      String(url).includes("/api/v1/passkey/auth/complete"),
+    );
+    const completeBody = JSON.parse(completeCall?.[1].body);
+    expect(completeBody.id).toBe("cred-1");
+    expect(completeBody.ceremony_id).toBe(42);
   });
 
   it("stays on login when bootstrap check fails", async () => {

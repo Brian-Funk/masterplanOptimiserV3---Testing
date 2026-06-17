@@ -8,13 +8,14 @@ from desktop_backend.conftest import create_test_event, create_test_task_type
 class FakeMpBackendResponse:
     """Minimal HTTP response returned by the fake MP-Backend client."""
 
-    status_code = 200
-
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._payload = payload
+        self.status_code = status_code
         self.text = ""
 
     def json(self):
+        if "tasks" not in self._payload:
+            return self._payload
         return {
             "tasks_created": len(self._payload["tasks"]),
             "persons_created": len(self._payload["persons"]),
@@ -26,6 +27,7 @@ class FakeAsyncClient:
     """Capture outbound publish payloads without calling an external server."""
 
     captured_payloads = []
+    supports_scoped_publish = True
 
     def __init__(self, *args, **kwargs):
         pass
@@ -35,6 +37,14 @@ class FakeAsyncClient:
 
     async def __aexit__(self, exc_type, exc, tb):
         return False
+
+    async def get(self, url, headers):
+        return FakeMpBackendResponse({
+            "status": "ok",
+            "event_name": "Publish Event",
+            "event_id": 1,
+            "supports_scoped_publish": self.supports_scoped_publish,
+        })
 
     async def post(self, url, headers, json):
         self.captured_payloads.append(json)
@@ -71,6 +81,7 @@ def test_mp_backend_publish_filters_tasks_to_requested_day(db, client, monkeypat
     db.commit()
 
     FakeAsyncClient.captured_payloads = []
+    FakeAsyncClient.supports_scoped_publish = True
     monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
 
     response = client.post(
@@ -81,6 +92,8 @@ def test_mp_backend_publish_filters_tasks_to_requested_day(db, client, monkeypat
     assert response.status_code == 200
     assert response.json()["tasks_created"] == 1
     payload = FakeAsyncClient.captured_payloads[0]
+    assert payload["publish_scope"] == "dates"
+    assert payload["dates"] == ["2026-08-01"]
     assert [task["name"] for task in payload["tasks"]] == ["Arrival Task"]
 
 
@@ -95,6 +108,7 @@ def test_mp_backend_publish_without_dates_sends_all_tasks(db, client, monkeypatc
     db.commit()
 
     FakeAsyncClient.captured_payloads = []
+    FakeAsyncClient.supports_scoped_publish = True
     monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
 
     response = client.post(f"/api/v1/mp-backend/publish/{event.id}", json={})
@@ -102,6 +116,8 @@ def test_mp_backend_publish_without_dates_sends_all_tasks(db, client, monkeypatc
     assert response.status_code == 200
     assert response.json()["tasks_created"] == 2
     payload = FakeAsyncClient.captured_payloads[0]
+    assert payload["publish_scope"] == "full"
+    assert "dates" not in payload
     assert [task["name"] for task in payload["tasks"]] == [
         "Arrival Task",
         "Session Task",
@@ -123,3 +139,30 @@ def test_mp_backend_publish_rejects_invalid_date(client, db):
 
     assert response.status_code == 400
     assert "Invalid publish date" in response.json()["detail"]
+
+
+def test_mp_backend_publish_refuses_selected_day_on_server_without_scoped_support(
+    db,
+    client,
+    monkeypatch,
+):
+    """Older servers must not receive a one-day payload they would full-replace."""
+    event = create_test_event(db, name="Publish Event")
+    event.mp_backend_url = "https://mp.example.test"
+    event.mp_backend_secret = "secret"
+    task_type = create_test_task_type(db)
+    create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
+    db.commit()
+
+    FakeAsyncClient.captured_payloads = []
+    FakeAsyncClient.supports_scoped_publish = False
+    monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.post(
+        f"/api/v1/mp-backend/publish/{event.id}",
+        json={"dates": ["2026-08-01"]},
+    )
+
+    assert response.status_code == 409
+    assert "does not support selected-day publishing" in response.json()["detail"]
+    assert FakeAsyncClient.captured_payloads == []

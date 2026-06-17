@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -32,6 +32,10 @@ const editedTask: Task = {
 };
 
 describe("web edit task markers", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("uses the desktop-style pencil indicator on calendar tasks", () => {
     render(
       <CalendarGrid
@@ -71,5 +75,37 @@ describe("web edit task markers", () => {
     expect(markers[0].className).toContain("rounded-full");
     expect(markers[0].querySelector("svg")).not.toBeNull();
     expect(screen.getByText("Edited on the web")).toBeInTheDocument();
+  });
+
+  it("keeps the current-time indicator below modals and centers its marker", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-21T09:30:00"));
+
+    const { container } = render(
+      <CalendarGrid
+        tasks={[{ ...editedTask, has_web_edit: false }]}
+        selectedDate="2026-05-21"
+        highlightedPersonId={null}
+        highlightMode="off"
+        onTaskDoubleClick={vi.fn()}
+      />,
+    );
+
+    const indicator = container.querySelector(
+      'div[class*="z-30"][class*="pointer-events-none"]',
+    );
+    expect(indicator).not.toBeNull();
+    expect(indicator?.className).not.toContain("z-[100]");
+
+    const centeredLayer = indicator?.firstElementChild as HTMLElement | null;
+    expect(centeredLayer?.className).toContain("h-[10px]");
+    expect(centeredLayer?.className).toContain("-translate-y-1/2");
+
+    const marker = centeredLayer?.children[0] as HTMLElement | undefined;
+    const line = centeredLayer?.children[1] as HTMLElement | undefined;
+    expect(marker?.className).toContain("top-1/2");
+    expect(marker?.className).toContain("-translate-y-1/2");
+    expect(line?.className).toContain("top-1/2");
+    expect(line?.className).toContain("-translate-y-1/2");
   });
 });

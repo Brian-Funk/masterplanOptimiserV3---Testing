@@ -2,6 +2,7 @@
 from fastapi.testclient import TestClient
 
 from server_backend.conftest import _raw_client, create_test_event
+from app.models.published import PublishedPerson, PublishedTask, TaskEdit
 
 
 def _publish_client(bearer_token: str) -> TestClient:
@@ -28,6 +29,29 @@ _MINIMAL_PAYLOAD = {
         {"id": 1, "first_name": "John", "last_name": "Doe"},
     ],
 }
+
+
+def _task_payload(task_id: int, name: str, day: str) -> dict:
+    return {
+        "id": task_id,
+        "name": name,
+        "start": f"{day}T09:00:00+00:00",
+        "end": f"{day}T10:00:00+00:00",
+        "attendees": [],
+        "additional": {"date": day},
+    }
+
+
+def _publish_days(client: TestClient, days: list[tuple[int, str, str]], **extra):
+    payload = {
+        "tasks": [_task_payload(task_id, name, day) for task_id, name, day in days],
+        "persons": [
+            {"id": 1, "first_name": "Anna", "last_name": "Muller"},
+            {"id": 2, "first_name": "Ben", "last_name": "Rossi"},
+        ],
+        **extra,
+    }
+    return client.post("/api/v1/publish/publish", json=payload)
 
 
 def test_publish_valid_token(db):
@@ -108,6 +132,187 @@ def test_publish_replaces_existing(db):
     ).all()
     assert len(tasks) == 1
     assert tasks[0].name == "Closing Ceremony"
+
+
+def test_publish_full_scope_replaces_existing(db):
+    """Explicit full-scope publish keeps legacy full replacement behaviour."""
+    event, secret = create_test_event(db, name="Full Scope Evt")
+    client = _publish_client(secret)
+    _publish_days(
+        client,
+        [
+            (1, "Arrival Task", "2026-08-01"),
+            (2, "Session Task", "2026-08-02"),
+        ],
+    )
+
+    r = _publish_days(
+        client,
+        [(3, "Replacement Task", "2026-08-03")],
+        publish_scope="full",
+    )
+
+    assert r.status_code == 200
+    tasks = db.query(PublishedTask).filter(PublishedTask.event_id == event.id).all()
+    assert [task.name for task in tasks] == ["Replacement Task"]
+
+
+def test_publish_date_scope_replaces_only_requested_day(db):
+    """Date-scoped publish overwrites the requested day and preserves other days."""
+    event, secret = create_test_event(db, name="Partial Scope Evt")
+    client = _publish_client(secret)
+    _publish_days(
+        client,
+        [
+            (1, "Arrival Task", "2026-08-01"),
+            (2, "Session Task", "2026-08-02"),
+            (3, "Departure Task", "2026-08-03"),
+        ],
+    )
+
+    r = _publish_days(
+        client,
+        [(20, "Updated Session Task", "2026-08-02")],
+        publish_scope="dates",
+        dates=["2026-08-02"],
+    )
+
+    assert r.status_code == 200
+    tasks = (
+        db.query(PublishedTask)
+        .filter(PublishedTask.event_id == event.id)
+        .order_by(PublishedTask.start_datetime)
+        .all()
+    )
+    assert [task.name for task in tasks] == [
+        "Arrival Task",
+        "Updated Session Task",
+        "Departure Task",
+    ]
+    assert [task.external_task_id for task in tasks] == [1, 20, 3]
+
+
+def test_publish_date_scope_adds_new_day_without_deleting_existing_days(db):
+    """Date-scoped publish can add a new day to the existing live schedule."""
+    event, secret = create_test_event(db, name="Add Day Evt")
+    client = _publish_client(secret)
+    _publish_days(client, [(1, "Arrival Task", "2026-08-01")])
+
+    r = _publish_days(
+        client,
+        [(2, "Session Task", "2026-08-02")],
+        publish_scope="dates",
+        dates=["2026-08-02"],
+    )
+
+    assert r.status_code == 200
+    tasks = (
+        db.query(PublishedTask)
+        .filter(PublishedTask.event_id == event.id)
+        .order_by(PublishedTask.start_datetime)
+        .all()
+    )
+    assert [task.name for task in tasks] == ["Arrival Task", "Session Task"]
+
+
+def test_publish_date_scope_clears_only_replaced_day_web_edits(db):
+    """Web edits on untouched days survive date-scoped publish."""
+    event, secret = create_test_event(db, name="Edit Scope Evt")
+    client = _publish_client(secret)
+    _publish_days(
+        client,
+        [
+            (1, "Arrival Task", "2026-08-01"),
+            (2, "Session Task", "2026-08-02"),
+        ],
+    )
+    tasks = {
+        task.external_task_id: task
+        for task in db.query(PublishedTask).filter(PublishedTask.event_id == event.id)
+    }
+    db.add(TaskEdit(task_id=tasks[1].id, name="Edited Arrival"))
+    db.add(TaskEdit(task_id=tasks[2].id, name="Edited Session"))
+    db.commit()
+
+    r = _publish_days(
+        client,
+        [(20, "Updated Session Task", "2026-08-02")],
+        publish_scope="dates",
+        dates=["2026-08-02"],
+    )
+
+    assert r.status_code == 200
+    remaining_edits = db.query(TaskEdit).all()
+    assert len(remaining_edits) == 1
+    remaining_task = db.query(PublishedTask).filter(
+        PublishedTask.id == remaining_edits[0].task_id,
+    ).one()
+    assert remaining_task.external_task_id == 1
+
+
+def test_publish_date_scope_upserts_people_without_deleting_existing_people(db):
+    """Partial publish updates incoming people and keeps older event people."""
+    event, secret = create_test_event(db, name="People Scope Evt")
+    client = _publish_client(secret)
+    _publish_days(client, [(1, "Arrival Task", "2026-08-01")])
+
+    payload = {
+        "publish_scope": "dates",
+        "dates": ["2026-08-02"],
+        "tasks": [_task_payload(2, "Session Task", "2026-08-02")],
+        "persons": [
+            {"id": 2, "first_name": "Benjamin", "last_name": "Rossi"},
+            {"id": 3, "first_name": "Clara", "last_name": "Smith"},
+        ],
+    }
+    r = client.post("/api/v1/publish/publish", json=payload)
+
+    assert r.status_code == 200
+    people = (
+        db.query(PublishedPerson)
+        .filter(PublishedPerson.event_id == event.id)
+        .order_by(PublishedPerson.external_person_id)
+        .all()
+    )
+    assert [(p.external_person_id, p.first_name) for p in people] == [
+        (1, "Anna"),
+        (2, "Benjamin"),
+        (3, "Clara"),
+    ]
+
+
+def test_publish_date_scope_rejects_empty_or_mismatched_dates(db):
+    """Scoped publish requires explicit matching dates to avoid accidental deletes."""
+    _event, secret = create_test_event(db, name="Invalid Scope Evt")
+    client = _publish_client(secret)
+
+    empty = client.post(
+        "/api/v1/publish/publish",
+        json={"publish_scope": "dates", "dates": [], "tasks": [], "persons": []},
+    )
+    assert empty.status_code == 400
+
+    mismatched = client.post(
+        "/api/v1/publish/publish",
+        json={
+            "publish_scope": "dates",
+            "dates": ["2026-08-02"],
+            "tasks": [_task_payload(1, "Wrong Day", "2026-08-01")],
+            "persons": [],
+        },
+    )
+    assert mismatched.status_code == 400
+
+
+def test_publish_ping_advertises_scoped_publish_support(db):
+    """Desktop clients can refuse selected-day publishing against old servers."""
+    _event, secret = create_test_event(db, name="Ping Scope Evt")
+    client = _publish_client(secret)
+
+    r = client.get("/api/v1/publish/ping")
+
+    assert r.status_code == 200
+    assert r.json()["supports_scoped_publish"] is True
 
 
 def test_publish_updates_event_metadata(db):

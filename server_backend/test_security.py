@@ -3,6 +3,7 @@ from server_backend.conftest import (
     create_test_event, create_test_user, inject_session, _make_client,
     _raw_client,
 )
+from app.models.audit import AuditLog
 
 
 # ── /api/v1/auth/me ──
@@ -217,3 +218,38 @@ def test_logout_clears_session(db, admin_client):
     # Subsequent /me should fail
     r2 = admin_client.get("/api/v1/auth/me")
     assert r2.status_code == 401
+
+
+def test_logout_accepts_empty_post_without_content_type(db):
+    """Logout is hotfix-safe for old clients that send an empty POST."""
+    event, _ = create_test_event(db, name="Logout Event")
+    user = create_test_user(db, username="logout.user", is_admin=True, event_id=event.id)
+    raw_token, csrf_token = inject_session(db, user)
+    client = _raw_client(cookies={"session_id": raw_token, "csrf_token": csrf_token})
+
+    r = client.post("/api/v1/auth/logout")
+
+    assert r.status_code == 200
+    assert r.headers.get("cache-control") == "no-store"
+    set_cookie = r.headers.get("set-cookie", "")
+    assert "session_id=" in set_cookie
+    assert "csrf_token=" in set_cookie
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_logout_audits_user_before_revoking_session(db):
+    """Logout audit keeps the user id even though the session is revoked."""
+    event, _ = create_test_event(db, name="Audit Event")
+    user = create_test_user(db, username="audit.logout", is_admin=True, event_id=event.id)
+    raw_token, csrf_token = inject_session(db, user)
+    client = _raw_client(
+        cookies={"session_id": raw_token, "csrf_token": csrf_token},
+        headers={"Content-Type": "application/json"},
+    )
+
+    r = client.post("/api/v1/auth/logout", json={})
+
+    assert r.status_code == 200
+    entry = db.query(AuditLog).filter(AuditLog.action == "auth.logout").one()
+    assert entry.user_id == user.id
+    assert entry.username == user.username

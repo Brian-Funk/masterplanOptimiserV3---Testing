@@ -218,6 +218,8 @@ describe("AuthContext logout", () => {
     expect(logoutCall[0]).toContain("/api/v1/auth/logout");
     expect(logoutCall[1].method).toBe("POST");
     expect(logoutCall[1].credentials).toBe("include");
+    expect(logoutCall[1].body).toBe(JSON.stringify({}));
+    expect(logoutCall[1].headers["Content-Type"]).toBe("application/json");
   });
 
   it("handles logout error gracefully", async () => {
@@ -254,14 +256,54 @@ describe("AuthContext logout", () => {
       screen.getByText("Logout").click();
     });
 
-    // Even on network error, user should be set to null locally
+    // On network error, local state should not pretend server logout succeeded.
     await waitFor(() => {
-      expect(screen.getByTestId("auth")).toHaveTextContent("no");
+      expect(screen.getByTestId("auth")).toHaveTextContent("yes");
     });
 
     spy.mockRestore();
   });
 
+  it("keeps the user authenticated when logout returns a non-ok response", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockUser,
+    });
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 415 });
+
+    function LogoutConsumer() {
+      const { isAuthenticated, isLoading, logout } = useAuth();
+      if (isLoading) return <div>Loading...</div>;
+      return (
+        <div>
+          <span data-testid="auth">{isAuthenticated ? "yes" : "no"}</span>
+          <button onClick={logout}>Logout</button>
+        </div>
+      );
+    }
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <AuthProvider>
+        <LogoutConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth")).toHaveTextContent("yes");
+    });
+
+    await act(async () => {
+      screen.getByText("Logout").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth")).toHaveTextContent("yes");
+    });
+
+    spy.mockRestore();
+  });
   it("refreshUser re-fetches and updates context", async () => {
     // Initial fetch: user is admin
     mockFetch.mockResolvedValueOnce({

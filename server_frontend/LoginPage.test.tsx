@@ -2,7 +2,7 @@
  * Tests for the login page component.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 
@@ -39,11 +39,19 @@ vi.stubGlobal("fetch", mockFetch);
 
 // Import useAuth so we can reset it in beforeEach
 import { useAuth } from "@/contexts/AuthContext";
+import { startAuthentication } from "@simplewebauthn/browser";
+
+function authBeginCalls() {
+  return mockFetch.mock.calls.filter(([url]) =>
+    String(url).includes("/api/v1/passkey/auth/begin"),
+  );
+}
 
 beforeEach(() => {
   mockPush.mockReset();
   mockFetch.mockReset();
   mockRefreshUser.mockReset();
+  vi.mocked(startAuthentication).mockReset();
   // Reset useAuth to default unauthenticated state
   vi.mocked(useAuth).mockImplementation(() => ({
     user: null,
@@ -321,6 +329,174 @@ describe("LoginPage", () => {
     const completeBody = JSON.parse(completeCall?.[1].body);
     expect(completeBody.id).toBe("cred-1");
     expect(completeBody.ceremony_id).toBe(42);
+  });
+
+  it("ignores duplicate passkey clicks while the first ceremony is starting", async () => {
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+    vi.mocked(startAuthentication).mockRejectedValueOnce(
+      Object.assign(new Error("User cancelled"), { name: "NotAllowedError" }),
+    );
+
+    let resolveBegin:
+      | ((
+          value: {
+            ok: boolean;
+            json: () => Promise<{ options: string; ceremony_id: number }>;
+          },
+        ) => void)
+      | null = null;
+
+    mockFetch.mockImplementation((url) => {
+      if (String(url).includes("/api/v1/passkey/bootstrap-status")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ needs_bootstrap: false }),
+        });
+      }
+      if (String(url).includes("/api/v1/passkey/auth/begin")) {
+        return new Promise((resolve) => {
+          resolveBegin = resolve;
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      });
+    });
+
+    const { default: LoginPage } = await import("@/app/login/page");
+    render(<LoginPage />);
+
+    const button = await screen.findByRole("button", {
+      name: /sign in with passkey/i,
+    });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(authBeginCalls()).toHaveLength(1);
+    });
+
+    resolveBegin?.({
+      ok: true,
+      json: async () => ({
+        options: JSON.stringify({ challenge: "auth-challenge" }),
+        ceremony_id: 7,
+      }),
+    });
+
+    await waitFor(() => {
+      expect(button).not.toBeDisabled();
+    });
+  });
+
+  it("clears the in-flight guard after passkey cancellation so retry starts a fresh ceremony", async () => {
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+    vi.mocked(startAuthentication)
+      .mockRejectedValueOnce(
+        Object.assign(
+          new Error("The operation either timed out or was not allowed."),
+          { name: "AbortError" },
+        ),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error("User cancelled"), { name: "NotAllowedError" }),
+      );
+
+    let ceremonyId = 0;
+    mockFetch.mockImplementation((url) => {
+      if (String(url).includes("/api/v1/passkey/bootstrap-status")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ needs_bootstrap: false }),
+        });
+      }
+      if (String(url).includes("/api/v1/passkey/auth/begin")) {
+        ceremonyId += 1;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            options: JSON.stringify({ challenge: `auth-${ceremonyId}` }),
+            ceremony_id: ceremonyId,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      });
+    });
+
+    const { default: LoginPage } = await import("@/app/login/page");
+    render(<LoginPage />);
+
+    const user = userEvent.setup();
+    const button = await screen.findByRole("button", {
+      name: /sign in with passkey/i,
+    });
+
+    await user.click(button);
+    await waitFor(() => {
+      expect(authBeginCalls()).toHaveLength(1);
+      expect(
+        screen.queryByText(/operation either timed out or was not allowed/i),
+      ).not.toBeInTheDocument();
+    });
+
+    await user.click(button);
+    await waitFor(() => {
+      expect(authBeginCalls()).toHaveLength(2);
+    });
+  });
+
+  it("still shows real backend passkey verification failures", async () => {
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+
+    mockFetch.mockImplementation((url) => {
+      if (String(url).includes("/api/v1/passkey/bootstrap-status")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ needs_bootstrap: false }),
+        });
+      }
+      if (String(url).includes("/api/v1/passkey/auth/begin")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            options: JSON.stringify({ challenge: "auth-challenge" }),
+            ceremony_id: 99,
+          }),
+        });
+      }
+      if (String(url).includes("/api/v1/passkey/auth/complete")) {
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({ detail: "Passkey verification failed" }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      });
+    });
+    vi.mocked(startAuthentication).mockResolvedValueOnce({
+      id: "cred-1",
+      rawId: "cred-1",
+      response: {},
+      type: "public-key",
+    } as never);
+
+    const { default: LoginPage } = await import("@/app/login/page");
+    render(<LoginPage />);
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: /sign in with passkey/i }),
+    );
+
+    expect(
+      await screen.findByText("Passkey verification failed"),
+    ).toBeInTheDocument();
   });
 
   it("stays on login when bootstrap check fails", async () => {

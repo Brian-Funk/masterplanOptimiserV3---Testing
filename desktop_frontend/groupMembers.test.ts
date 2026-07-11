@@ -242,6 +242,21 @@ describe("group member availability", () => {
     });
   });
 
+  it("infers a normal CMI task date when no selected working day is supplied", () => {
+    const resolved = resolveAvailability({
+      unavailabilities: [
+        { from: "2026-07-10T09:15", to: "2026-07-10T09:45" },
+      ],
+      selectedWorkingDate: null,
+      taskDate: "2026-07-10",
+      taskStart: "09:00",
+      taskEnd: "10:00",
+    });
+
+    expect(resolved.personIds).toEqual([]);
+    expect(resolved.excludedPersons).toHaveLength(1);
+  });
+
   it("uses both dates for a multi-day unavailability period", () => {
     const resolved = resolveAvailability({
       unavailabilities: [

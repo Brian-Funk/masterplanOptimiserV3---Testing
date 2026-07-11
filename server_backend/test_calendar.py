@@ -1,4 +1,5 @@
 """Tests for calendar endpoints."""
+import json
 from datetime import datetime, timezone
 
 from server_backend.conftest import (
@@ -12,6 +13,7 @@ from app.models.published import (
     PublishedGeneralScheduleItem,
     PublishedTask,
     PublishedPerson,
+    TaskEdit,
 )
 
 
@@ -109,6 +111,105 @@ def test_get_calendar_returns_public_schedule_views(db):
         {"id": 10, "name": "Delegates", "sort_order": 0.0},
     ]
     assert data["public_schedule_items"][0]["category_id"] == 10
+
+
+def test_commit_preserves_structured_assignment_categories(db):
+    """Web edits keep assignment fields separate instead of flattening them."""
+    event, _ = create_test_event(db, name="Structured Assignments")
+    task = PublishedTask(
+        event_id=event.id,
+        external_task_id=5,
+        name="Meal Transfer",
+        start_datetime=datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc),
+        attendees_json=json.dumps([
+            {"name": "Person A", "person_id": 1},
+            {"name": "Person B", "person_id": 2},
+        ]),
+        field_assignments_json=json.dumps({
+            "driver": [{"name": "Person A", "person_id": 1}],
+            "cook": [{"name": "Person B", "person_id": 2}],
+        }),
+        field_definitions_json=json.dumps([
+            {"id": "driver", "name": "Driver", "type": "persons_list"},
+            {"id": "cook", "name": "Cook", "type": "persons_list"},
+        ]),
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    editor = create_test_user(
+        db,
+        username="structured.editor",
+        event_id=event.id,
+        can_edit=True,
+    )
+    client = _make_client(db, editor)
+
+    added = client.post(
+        f"/api/v1/calendar/{event.id}/tasks/commit",
+        json={
+            "edits": [
+                {
+                    "task_id": task.id,
+                    "field_assignments": {
+                        "driver": [{"name": "Person A", "person_id": 1}],
+                        "cook": [
+                            {"name": "Person B", "person_id": 2},
+                            {"name": "Person C", "person_id": 3},
+                        ],
+                    },
+                },
+            ],
+            "deletions": [],
+            "creations": [],
+        },
+    )
+
+    assert added.status_code == 200
+    edit = db.query(TaskEdit).filter(TaskEdit.task_id == task.id).one()
+    assert json.loads(edit.field_assignments_json) == {
+        "driver": [{"name": "Person A", "person_id": 1}],
+        "cook": [
+            {"name": "Person B", "person_id": 2},
+            {"name": "Person C", "person_id": 3},
+        ],
+    }
+    assert json.loads(edit.attendees_json) == [
+        {"name": "Person A", "person_id": 1},
+        {"name": "Person B", "person_id": 2},
+        {"name": "Person C", "person_id": 3},
+    ]
+
+    removed = client.post(
+        f"/api/v1/calendar/{event.id}/tasks/commit",
+        json={
+            "edits": [
+                {
+                    "task_id": task.id,
+                    "field_assignments": {
+                        "driver": [{"name": "Person A", "person_id": 1}],
+                        "cook": [{"name": "Person C", "person_id": 3}],
+                    },
+                },
+            ],
+            "deletions": [],
+            "creations": [],
+        },
+    )
+
+    assert removed.status_code == 200
+    refreshed = client.get(f"/api/v1/calendar/{event.id}")
+    assert refreshed.status_code == 200
+    task_data = refreshed.json()["tasks"][0]
+    assert task_data["field_assignments"] == {
+        "driver": [{"name": "Person A", "person_id": 1}],
+        "cook": [{"name": "Person C", "person_id": 3}],
+    }
+    assert task_data["attendees"] == [
+        {"name": "Person A", "person_id": 1},
+        {"name": "Person C", "person_id": 3},
+    ]
 
 
 def test_get_calendar_unauthenticated(db):

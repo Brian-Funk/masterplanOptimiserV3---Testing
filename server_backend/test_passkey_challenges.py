@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from webauthn.helpers import bytes_to_base64url
 
 from app.api.v1 import passkey as passkey_api
+from app.core.activation import create_activation_link
 from app.core.rate_limit import limiter
 from app.models.user import PasskeyChallenge, WebAuthnCredential
 from server_backend.conftest import _make_client, _raw_client, create_test_user
@@ -171,7 +172,7 @@ def test_expired_auth_ceremony_fails_cleanly(db, monkeypatch):
     assert complete.status_code == 400
 
 
-def test_registration_double_begin_can_complete_matching_ceremony_and_clears_leftovers(db, monkeypatch):
+def test_registration_double_begin_consumes_only_matching_ceremony(db, monkeypatch):
     user = create_test_user(db, username="register.admin", is_admin=True)
     client = _make_client(db, user)
     _install_registration_success(monkeypatch, b"registered-cred")
@@ -185,6 +186,45 @@ def test_registration_double_begin_can_complete_matching_ceremony_and_clears_lef
         json=_registration_body(ceremony_id=begin_first["ceremony_id"]),
     )
     assert complete.status_code == 200
+    assert db.query(PasskeyChallenge).filter(
+        PasskeyChallenge.challenge_type == "registration",
+        PasskeyChallenge.user_id == user.id,
+    ).count() == 1
+
+
+def test_activation_registration_ceremonies_complete_independently(db, monkeypatch):
+    """Two activation devices keep independent registration challenges."""
+    admin = create_test_user(db, username="activation.admin", is_admin=True)
+    user = create_test_user(db, username="activation.user", is_activated=False)
+    token, _ = create_activation_link(user.id, admin.id, db)
+    db.commit()
+    client = _raw_client()
+
+    begin_first = client.post(
+        f"/api/v1/passkey/register/begin?activation_token={token}",
+    ).json()
+    begin_second = client.post(
+        f"/api/v1/passkey/register/begin?activation_token={token}",
+    ).json()
+    assert begin_first["ceremony_id"] != begin_second["ceremony_id"]
+
+    _install_registration_success(monkeypatch, b"activation-cred-1")
+    complete_first = client.post(
+        f"/api/v1/passkey/register/complete?activation_token={token}",
+        json=_registration_body(ceremony_id=begin_first["ceremony_id"]),
+    )
+    assert complete_first.status_code == 200
+    assert db.query(PasskeyChallenge).filter(
+        PasskeyChallenge.challenge_type == "registration",
+        PasskeyChallenge.user_id == user.id,
+    ).count() == 1
+
+    _install_registration_success(monkeypatch, b"activation-cred-2")
+    complete_second = client.post(
+        f"/api/v1/passkey/register/complete?activation_token={token}",
+        json=_registration_body(ceremony_id=begin_second["ceremony_id"]),
+    )
+    assert complete_second.status_code == 200
     assert db.query(PasskeyChallenge).filter(
         PasskeyChallenge.challenge_type == "registration",
         PasskeyChallenge.user_id == user.id,

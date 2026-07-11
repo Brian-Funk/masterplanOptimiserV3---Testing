@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import React from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { storeOfflineAccessForCalendar } from "@/lib/offlineAccess";
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -50,6 +51,7 @@ const mockUser = {
 
 beforeEach(() => {
   mockFetch.mockReset();
+  localStorage.clear();
 });
 
 describe("AuthContext", () => {
@@ -90,6 +92,33 @@ describe("AuthContext", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Not authenticated")).toBeInTheDocument();
+    });
+  });
+
+  it("keeps offline auth state when session check fails with a valid marker", async () => {
+    storeOfflineAccessForCalendar(mockUser, 1);
+    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+
+    function OfflineConsumer() {
+      const { authStatus, offlineAccess, isLoading } = useAuth();
+      if (isLoading) return <div>Loading...</div>;
+      return (
+        <div>
+          <span data-testid="status">{authStatus}</span>
+          <span data-testid="event">{offlineAccess?.event_id ?? "none"}</span>
+        </div>
+      );
+    }
+
+    render(
+      <AuthProvider>
+        <OfflineConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("offline");
+      expect(screen.getByTestId("event")).toHaveTextContent("1");
     });
   });
 

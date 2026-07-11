@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 import { CalendarGrid } from "@/components/CalendarGrid";
@@ -107,5 +107,68 @@ describe("web edit task markers", () => {
     expect(marker?.className).toContain("-translate-y-1/2");
     expect(line?.className).toContain("top-1/2");
     expect(line?.className).toContain("-translate-y-1/2");
+  });
+
+  it("drafts structured assignment edits without flattening categories", () => {
+    const onDraftEdit = vi.fn();
+    const structuredTask: Task = {
+      ...editedTask,
+      has_web_edit: false,
+      attendees: [
+        { name: "Person A", person_id: 1 },
+        { name: "Person B", person_id: 2 },
+      ],
+      field_assignments: {
+        driver: [{ name: "Person A", person_id: 1 }],
+        cook: [{ name: "Person B", person_id: 2 }],
+      },
+      field_definitions: [
+        { id: "driver", name: "Driver", type: "persons_list" },
+        { id: "cook", name: "Cook", type: "persons_list" },
+      ],
+    };
+
+    const { container } = render(
+      <TaskDetailModal
+        task={structuredTask}
+        canEdit
+        eventId={1}
+        persons={[
+          { id: 1, external_person_id: 1, first_name: "Person", last_name: "A" },
+          { id: 2, external_person_id: 2, first_name: "Person", last_name: "B" },
+          { id: 3, external_person_id: 3, first_name: "Person", last_name: "C" },
+        ]}
+        onClose={vi.fn()}
+        onDataChanged={vi.fn()}
+        onDraftEdit={onDraftEdit}
+        onDraftDelete={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Edit task"));
+    expect(screen.getByText("Driver")).toBeInTheDocument();
+    expect(screen.getByText("Cook")).toBeInTheDocument();
+
+    const selects = container.querySelectorAll("select");
+    fireEvent.change(selects[1], { target: { value: "3" } });
+    fireEvent.click(screen.getByText("Save Draft"));
+
+    expect(onDraftEdit).toHaveBeenCalledWith(
+      structuredTask.id,
+      expect.objectContaining({
+        field_assignments: {
+          driver: [{ name: "Person A", person_id: 1 }],
+          cook: [
+            { name: "Person B", person_id: 2 },
+            { name: "Person C", person_id: 3 },
+          ],
+        },
+        attendees: [
+          { name: "Person A", person_id: 1 },
+          { name: "Person B", person_id: 2 },
+          { name: "Person C", person_id: 3 },
+        ],
+      }),
+    );
   });
 });

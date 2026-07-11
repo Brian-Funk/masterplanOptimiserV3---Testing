@@ -359,7 +359,7 @@ describe("LoginPage", () => {
     expect(beginCall?.[1].body).toBeUndefined();
   });
 
-  it("shows account-name fallback when the credential manager cannot find a passkey", async () => {
+  it("shows discoverable-passkey guidance when the credential manager cannot find a passkey", async () => {
     const { startAuthentication } = await import("@simplewebauthn/browser");
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(startAuthentication).mockRejectedValueOnce(
@@ -394,94 +394,22 @@ describe("LoginPage", () => {
     const { default: LoginPage } = await import("@/app/login/page");
     render(<LoginPage />);
 
-    const user = userEvent.setup();
-    await user.click(
-      await screen.findByRole("button", { name: /sign in with passkey/i }),
-    );
+    try {
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole("button", { name: /sign in with passkey/i }),
+      );
 
-    expect(
-      await screen.findByText(/No usable passkey was found automatically/i),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText(/account name/i)).toBeInTheDocument();
-    consoleSpy.mockRestore();
-  });
-
-  it("sends username when account-name fallback is used", async () => {
-    const { startAuthentication } = await import("@simplewebauthn/browser");
-
-    mockFetch.mockImplementation((url) => {
-      if (String(url).includes("/api/v1/passkey/bootstrap-status")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ needs_bootstrap: false }),
-        });
-      }
-      if (String(url).includes("/api/v1/passkey/auth/begin")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            options: JSON.stringify({ challenge: "auth-challenge" }),
-            ceremony_id: 77,
-          }),
-        });
-      }
-      if (String(url).includes("/api/v1/passkey/auth/complete")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ exchange_code: "exchange-77" }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({}),
-      });
-    });
-    vi.mocked(startAuthentication).mockResolvedValueOnce({
-      id: "cred-77",
-      rawId: "cred-77",
-      response: {},
-      type: "public-key",
-    } as never);
-
-    const { default: LoginPage } = await import("@/app/login/page");
-    render(<LoginPage />);
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /use account name/i }));
-    await user.type(screen.getByLabelText(/account name/i), "phone.admin");
-    await user.click(
-      screen.getByRole("button", { name: /sign in with account name/i }),
-    );
-
-    await waitFor(() => {
-      expect(mockRefreshUser).toHaveBeenCalled();
-    });
-
-    const beginCall = mockFetch.mock.calls.find(([url]) =>
-      String(url).includes("/api/v1/passkey/auth/begin"),
-    );
-    expect(JSON.parse(beginCall?.[1].body)).toEqual({
-      username: "phone.admin",
-    });
-  });
-
-  it("requires an account name before starting fallback login", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ needs_bootstrap: false }),
-    });
-
-    const { default: LoginPage } = await import("@/app/login/page");
-    render(<LoginPage />);
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /use account name/i }));
-    await user.click(
-      screen.getByRole("button", { name: /sign in with account name/i }),
-    );
-
-    expect(await screen.findByText("Enter your account name.")).toBeInTheDocument();
-    expect(authBeginCalls()).toHaveLength(0);
+      expect(
+        await screen.findByText(/No usable passkey was found on this device/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText(/account name/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /use account name/i }),
+      ).not.toBeInTheDocument();
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 
   it("ignores duplicate passkey clicks while the first ceremony is starting", async () => {

@@ -172,6 +172,143 @@ def test_expired_auth_ceremony_fails_cleanly(db, monkeypatch):
     assert complete.status_code == 400
 
 
+def test_username_auth_begin_scopes_challenge_and_allows_user_credentials(db):
+    """Account-name passkey login scopes the challenge to that account."""
+    limiter.reset()
+    user = create_test_user(db, username="phone.admin", is_admin=True)
+    _add_credential(db, user, "phone-cred")
+
+    client = _raw_client()
+    response = client.post(
+        "/api/v1/passkey/auth/begin",
+        json={"username": "phone.admin"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    options = json.loads(body["options"])
+    assert _raw_id("phone-cred") in [
+        credential["id"] for credential in options["allowCredentials"]
+    ]
+    challenge = db.query(PasskeyChallenge).filter(
+        PasskeyChallenge.id == body["ceremony_id"],
+    ).one()
+    assert challenge.user_id == user.id
+
+
+def test_username_auth_begin_fails_generically_for_unusable_accounts(db):
+    """Account-name login does not expose why a passkey challenge cannot start."""
+    limiter.reset()
+    inactive = create_test_user(db, username="inactive.login")
+    inactive.is_active = False
+    unactivated = create_test_user(
+        db,
+        username="unactivated.login",
+        is_activated=False,
+    )
+    no_passkey = create_test_user(db, username="without.passkey")
+    db.commit()
+
+    client = _raw_client()
+    for username in [
+        "missing.login",
+        inactive.username,
+        unactivated.username,
+        no_passkey.username,
+    ]:
+        response = client.post(
+            "/api/v1/passkey/auth/begin",
+            json={"username": username},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Unable to start passkey authentication"
+
+
+def test_username_auth_challenge_completes_with_matching_credential(db, monkeypatch):
+    """A username-scoped challenge can complete with that user's credential."""
+    limiter.reset()
+    user = create_test_user(db, username="scoped.login", is_admin=True)
+    _add_credential(db, user, "scoped-cred")
+    _install_auth_success(monkeypatch)
+
+    client = _raw_client()
+    begin = client.post(
+        "/api/v1/passkey/auth/begin",
+        json={"username": "scoped.login"},
+    ).json()
+
+    complete = client.post(
+        "/api/v1/passkey/auth/complete",
+        json=_auth_body("scoped-cred", ceremony_id=begin["ceremony_id"]),
+    )
+
+    assert complete.status_code == 200
+    assert "exchange_code" in complete.json()
+    assert db.query(PasskeyChallenge).filter(
+        PasskeyChallenge.id == begin["ceremony_id"],
+    ).count() == 0
+
+
+def test_username_auth_challenge_rejects_other_users_credential(db, monkeypatch):
+    """A username-scoped challenge cannot be completed by another account."""
+    limiter.reset()
+    user_a = create_test_user(db, username="scoped.a", is_admin=True)
+    user_b = create_test_user(db, username="scoped.b", is_admin=True)
+    _add_credential(db, user_a, "scoped-a-cred")
+    _add_credential(db, user_b, "scoped-b-cred")
+    _install_auth_success(monkeypatch)
+
+    client = _raw_client()
+    begin = client.post(
+        "/api/v1/passkey/auth/begin",
+        json={"username": "scoped.a"},
+    ).json()
+
+    complete = client.post(
+        "/api/v1/passkey/auth/complete",
+        json=_auth_body("scoped-b-cred", ceremony_id=begin["ceremony_id"]),
+    )
+
+    assert complete.status_code == 400
+    assert complete.json()["detail"] == "Authentication failed"
+    assert db.query(PasskeyChallenge).filter(
+        PasskeyChallenge.id == begin["ceremony_id"],
+    ).count() == 0
+
+
+def test_register_begin_requires_discoverable_credentials_for_admin(db):
+    """Authenticated passkey registration requires discoverable credentials."""
+    user = create_test_user(db, username="discoverable.admin", is_admin=True)
+    client = _make_client(db, user)
+
+    response = client.post("/api/v1/passkey/register/begin")
+
+    assert response.status_code == 200
+    options = json.loads(response.json()["options"])
+    assert options["authenticatorSelection"]["residentKey"] == "required"
+
+
+def test_activation_register_begin_requires_discoverable_credentials(db):
+    """Activation passkey registration requires discoverable credentials."""
+    admin = create_test_user(db, username="discoverable.root", is_admin=True)
+    user = create_test_user(
+        db,
+        username="discoverable.activation",
+        is_activated=False,
+    )
+    token, _ = create_activation_link(user.id, admin.id, db)
+    db.commit()
+    client = _raw_client()
+
+    response = client.post(
+        f"/api/v1/passkey/register/begin?activation_token={token}",
+    )
+
+    assert response.status_code == 200
+    options = json.loads(response.json()["options"])
+    assert options["authenticatorSelection"]["residentKey"] == "required"
+
+
 def test_registration_double_begin_consumes_only_matching_ceremony(db, monkeypatch):
     user = create_test_user(db, username="register.admin", is_admin=True)
     client = _make_client(db, user)

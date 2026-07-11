@@ -223,6 +223,35 @@ describe("LoginPage", () => {
     });
   });
 
+  it("redirects offline access with an event to /calendar", async () => {
+    const { useAuth } = await import("@/contexts/AuthContext");
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      authStatus: "offline",
+      offlineAccess: {
+        user_id: 3,
+        event_id: 2,
+        cached_at: "2026-05-21T09:30:00.000Z",
+        valid_until: "2999-05-21T23:59:59.999Z",
+        ttl_hours: 24,
+      },
+      offlineAccessExpired: false,
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    mockFetch.mockRejectedValue(new Error("Network error"));
+
+    const { default: LoginPage } = await import("@/app/login/page");
+    render(<LoginPage />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/calendar?event=2");
+    });
+  });
+
   it("redirects user without event to /admin", async () => {
     const { useAuth } = await import("@/contexts/AuthContext");
     vi.mocked(useAuth).mockReturnValue({

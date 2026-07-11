@@ -27,7 +27,7 @@ def test_me_returns_user_with_valid_session(db, root_client):
 
 
 def test_me_returns_configured_offline_access_window(db, root_client):
-    """GET /me returns the runtime offline cached view window."""
+    """GET /me returns the runtime offline calendar access window."""
     from app.core import runtime_settings
 
     runtime_settings.set_value("offline_access_ttl_hours", 6, db)
@@ -224,17 +224,83 @@ def test_reauth_required_allows_with_reauth(db, reauth_admin_client):
 # ── Security settings ──
 
 
-def test_admin_settings_exposes_offline_access_window(db, admin_client):
-    """GET /admin/settings includes the offline cached view window."""
-    r = admin_client.get("/api/v1/admin/settings")
+def test_root_settings_exposes_offline_access_window(db, root_client):
+    """GET /admin/settings includes the offline calendar access window."""
+    r = root_client.get("/api/v1/admin/settings")
 
     assert r.status_code == 200
     setting = r.json()["offline_access_ttl_hours"]
     assert setting["value"] == 24
     assert setting["default"] == 24
+    assert setting["label"] == "Offline calendar access window"
     assert setting["unit"] == "hours"
     assert setting["min"] == 1
     assert setting["max"] == 24
+
+
+def test_admin_settings_blocks_non_root_admin(db, admin_client):
+    """GET /admin/settings is limited to root admins."""
+    r = admin_client.get("/api/v1/admin/settings")
+
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Root admin access required"
+
+
+def test_root_settings_updates_offline_access_window_with_reauth(db):
+    """Root admins can update offline access after recent re-authentication."""
+    from app.core import runtime_settings
+
+    root = create_test_user(
+        db,
+        username="settings.root",
+        is_root_admin=True,
+        is_admin=True,
+    )
+    client = _make_client(db, root, reauth=True)
+
+    r = client.put(
+        "/api/v1/admin/settings",
+        json={"settings": {"offline_access_ttl_hours": 6}},
+    )
+
+    assert r.status_code == 200
+    assert r.json()["updated"] == ["offline_access_ttl_hours"]
+    assert runtime_settings.get_int("offline_access_ttl_hours", db) == 6
+
+
+def test_root_settings_rejects_invalid_offline_access_window(db):
+    """Root settings updates reject values outside the configured range."""
+    root = create_test_user(
+        db,
+        username="settings.invalid",
+        is_root_admin=True,
+        is_admin=True,
+    )
+    client = _make_client(db, root, reauth=True)
+
+    r = client.put(
+        "/api/v1/admin/settings",
+        json={"settings": {"offline_access_ttl_hours": 25}},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["updated"] == []
+    assert body["errors"][0]["key"] == "offline_access_ttl_hours"
+
+
+def test_admin_settings_update_blocks_non_root_admin(db):
+    """PUT /admin/settings is limited to root admins."""
+    admin = create_test_user(db, username="settings.admin", is_admin=True)
+    client = _make_client(db, admin, reauth=True)
+
+    r = client.put(
+        "/api/v1/admin/settings",
+        json={"settings": {"offline_access_ttl_hours": 6}},
+    )
+
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Root admin access required"
 
 
 # ── Logout ──

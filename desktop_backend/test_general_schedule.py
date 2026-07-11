@@ -31,11 +31,21 @@ def _create_type(client, event_id: int) -> tuple[int, str]:
     return response.json()["id"], colour
 
 
+def _create_view(client, event_id: int, name: str = "Delegates") -> int:
+    response = client.post(
+        f"/api/v1/general-schedule/schedule-views?event_id={event_id}",
+        json={"name": name},
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
 def test_session_element_writes_ignore_legacy_hidden_fields(db, client):
     event = create_test_event(db)
     location = create_test_location(db, event.id, name="Room A")
     person = create_test_person(db, event.id, first_name="Anna", last_name="Muller")
     team_id = _create_team(client, event.id)
+    view_id = _create_view(client, event.id)
     type_id, type_colour = _create_type(client, event.id)
 
     create_payload = {
@@ -50,6 +60,7 @@ def test_session_element_writes_ignore_legacy_hidden_fields(db, client):
         "location_text": "Legacy free text",
         "location_note": "Legacy note",
         "attendee_team_ids": [team_id],
+        "schedule_view_ids": [view_id],
         "visibility": "internal",
         "description": "Bring laptops.",
         "category": "Legacy category",
@@ -66,6 +77,7 @@ def test_session_element_writes_ignore_legacy_hidden_fields(db, client):
     assert created_data["location_text"] is None
     assert created_data["location_note"] is None
     assert created_data["category"] is None
+    assert created_data["schedule_view_ids"] == [view_id]
 
     updated = client.put(
         f"/api/v1/general-schedule/session-elements/{created_data['id']}?event_id={event.id}",
@@ -84,6 +96,7 @@ def test_session_element_writes_ignore_legacy_hidden_fields(db, client):
     assert updated_data["location_text"] is None
     assert updated_data["location_note"] is None
     assert updated_data["category"] is None
+    assert updated_data["schedule_view_ids"] == [view_id]
 
     duplicate = client.post(
         f"/api/v1/general-schedule/session-elements/{created_data['id']}/duplicate?event_id={event.id}",
@@ -95,6 +108,7 @@ def test_session_element_writes_ignore_legacy_hidden_fields(db, client):
     assert duplicate_data["location_text"] is None
     assert duplicate_data["location_note"] is None
     assert duplicate_data["category"] is None
+    assert duplicate_data["schedule_view_ids"] == [view_id]
 
     copied = client.post(
         f"/api/v1/general-schedule/session-elements/copy?event_id={event.id}",
@@ -107,6 +121,74 @@ def test_session_element_writes_ignore_legacy_hidden_fields(db, client):
     assert copied_data["location_text"] is None
     assert copied_data["location_note"] is None
     assert copied_data["category"] is None
+    assert copied_data["schedule_view_ids"] == [view_id]
+
+
+def test_session_element_allows_no_target_audience_or_schedule_view(db, client):
+    event = create_test_event(db)
+    type_id, _ = _create_type(client, event.id)
+
+    created = client.post(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+        json={
+            "title": "Unpublished briefing",
+            "date": "2026-08-01",
+            "start_time": "09:00",
+            "end_time": "10:00",
+            "session_element_type_id": type_id,
+            "attendee_team_ids": [],
+            "schedule_view_ids": [],
+        },
+    )
+
+    assert created.status_code == 201
+    data = created.json()
+    assert data["attendee_team_ids"] == []
+    assert data["schedule_view_ids"] == []
+
+
+def test_schedule_view_validation_and_delete_cleanup(db, client):
+    event = create_test_event(db)
+    type_id, _ = _create_type(client, event.id)
+    view_id = _create_view(client, event.id, name="Officials")
+
+    missing = client.post(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+        json={
+            "title": "Invalid view",
+            "date": "2026-08-01",
+            "start_time": "09:00",
+            "end_time": "10:00",
+            "session_element_type_id": type_id,
+            "schedule_view_ids": [999],
+        },
+    )
+    assert missing.status_code == 400
+    assert "Schedule view not found" in missing.json()["detail"]
+
+    created = client.post(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+        json={
+            "title": "Officials briefing",
+            "date": "2026-08-01",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "session_element_type_id": type_id,
+            "schedule_view_ids": [view_id],
+        },
+    )
+    assert created.status_code == 201
+
+    deleted = client.delete(
+        f"/api/v1/general-schedule/schedule-views/{view_id}?event_id={event.id}",
+    )
+    assert deleted.status_code == 204
+
+    elements = client.get(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+    )
+    assert elements.status_code == 200
+    assert elements.json()[0]["schedule_view_ids"] == []
 
 
 def test_session_element_type_delete_requires_no_references(db, client):

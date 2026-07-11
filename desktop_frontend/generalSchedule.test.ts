@@ -18,6 +18,10 @@ const teams = [
   { id: 2, event_id: 10, name: "Officials", category_id: 1 },
 ];
 
+const scheduleViews = [
+  { id: 4, event_id: 10, name: "Delegates", sort_order: 0 },
+];
+
 const locations = [
   { id: 7, event_id: 10, name: "Room A", address: "", capacity: null },
 ];
@@ -49,6 +53,7 @@ const element = {
   responsible_person_id: 3,
   responsible_text: "",
   attendee_team_ids: [1],
+  schedule_view_ids: [4],
   visibility: "public" as const,
   description: "Bring laptops.",
   sort_order: 0,
@@ -91,6 +96,7 @@ describe("general schedule templates", () => {
       locations,
       persons,
       types,
+      scheduleViews,
     ));
 
     expect(source).toHaveLength(1);
@@ -101,9 +107,32 @@ describe("general schedule templates", () => {
       copy_template_html: types[0].copy_template_html,
       location_name: "Room A",
     });
+    expect(source[0].schedule_views).toEqual([
+      expect.objectContaining({ id: 4, name: "Delegates" }),
+    ]);
     expect(source[0].audience_teams).toEqual([
       expect.objectContaining({ id: 1, name: "FEMM" }),
     ]);
+  });
+
+  it("excludes public elements without a selected schedule view from public fingerprints", () => {
+    const noViewElement = {
+      ...element,
+      id: 13,
+      title: "No public view",
+      schedule_view_ids: [],
+    };
+    const source = JSON.parse(buildGeneralSchedulePublicFingerprintSource(
+      [element, noViewElement],
+      teams,
+      locations,
+      persons,
+      types,
+      scheduleViews,
+    ));
+
+    expect(source).toHaveLength(1);
+    expect(source[0].title).toBe("Opening Briefing");
   });
 
   it("renders copied elements as separate text and HTML lines", () => {

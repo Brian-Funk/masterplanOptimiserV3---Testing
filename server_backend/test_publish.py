@@ -2,7 +2,13 @@
 from fastapi.testclient import TestClient
 
 from server_backend.conftest import _raw_client, create_test_event
-from app.models.published import PublishedPerson, PublishedTask, TaskEdit
+from app.models.published import (
+    PublishedGeneralScheduleCategory,
+    PublishedGeneralScheduleItem,
+    PublishedPerson,
+    PublishedTask,
+    TaskEdit,
+)
 
 
 def _publish_client(bearer_token: str) -> TestClient:
@@ -359,3 +365,83 @@ def test_publish_ignores_legacy_logo_theme_payload(db):
     db.refresh(event)
     assert event.logo_color_1 == "#111111"
     assert event.logo_color_2 == "#222222"
+
+
+def test_general_schedule_publish_uses_explicit_schedule_views(db):
+    """Explicit Schedule Views publish one public item row per selected view."""
+    event, secret = create_test_event(db, name="General Schedule Evt")
+    client = _publish_client(secret)
+
+    response = client.post(
+        "/api/v1/publish/general-schedule",
+        json={
+            "event": {"name": "General Schedule Evt"},
+            "fingerprint": "abc123",
+            "schedule_views": [
+                {"id": 10, "name": "Delegates", "sort_order": 0},
+                {"id": 11, "name": "Officials", "sort_order": 1},
+            ],
+            "items": [
+                {
+                    "id": 100,
+                    "title": "Opening Briefing",
+                    "date": "2026-08-01",
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "schedule_view_ids": [10, 11],
+                    "schedule_view_names": ["Delegates", "Officials"],
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items_published"] == 1
+    categories = (
+        db.query(PublishedGeneralScheduleCategory)
+        .filter(PublishedGeneralScheduleCategory.event_id == event.id)
+        .order_by(PublishedGeneralScheduleCategory.sort_order)
+        .all()
+    )
+    items = (
+        db.query(PublishedGeneralScheduleItem)
+        .filter(PublishedGeneralScheduleItem.event_id == event.id)
+        .order_by(PublishedGeneralScheduleItem.category_id)
+        .all()
+    )
+    assert [category.name for category in categories] == ["Delegates", "Officials"]
+    assert [item.category_id for item in items] == [10, 11]
+    assert [item.category_name for item in items] == ["Delegates", "Officials"]
+
+
+def test_general_schedule_publish_does_not_create_fallback_for_explicit_no_view_items(db):
+    """Explicit Schedule View payloads do not publish no-view items."""
+    event, secret = create_test_event(db, name="No Fallback Evt")
+    client = _publish_client(secret)
+
+    response = client.post(
+        "/api/v1/publish/general-schedule",
+        json={
+            "fingerprint": "no-view",
+            "schedule_views": [],
+            "items": [
+                {
+                    "id": 101,
+                    "title": "Unassigned",
+                    "date": "2026-08-01",
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "schedule_view_ids": [],
+                    "schedule_view_names": [],
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert db.query(PublishedGeneralScheduleCategory).filter(
+        PublishedGeneralScheduleCategory.event_id == event.id,
+    ).count() == 0
+    assert db.query(PublishedGeneralScheduleItem).filter(
+        PublishedGeneralScheduleItem.event_id == event.id,
+    ).count() == 0

@@ -7,7 +7,12 @@ from server_backend.conftest import (
     create_test_event,
     create_test_user,
 )
-from app.models.published import PublishedTask, PublishedPerson
+from app.models.published import (
+    PublishedGeneralScheduleCategory,
+    PublishedGeneralScheduleItem,
+    PublishedTask,
+    PublishedPerson,
+)
 
 
 def _seed_published_data(db, event_id: int):
@@ -67,6 +72,43 @@ def test_get_calendar_persons(db):
     data = r.json()
     assert len(data) >= 1
     assert data[0]["first_name"] == "Jane"
+
+
+def test_get_calendar_returns_public_schedule_views(db):
+    """Calendar payload includes published public schedule views."""
+    event, _ = create_test_event(db, name="Schedule View Evt")
+    db.add(
+        PublishedGeneralScheduleCategory(
+            event_id=event.id,
+            external_category_id=10,
+            name="Delegates",
+            sort_order=0,
+        )
+    )
+    db.add(
+        PublishedGeneralScheduleItem(
+            event_id=event.id,
+            external_session_element_id=100,
+            title="Opening Briefing",
+            date="2026-08-01",
+            start_time="09:00",
+            end_time="10:00",
+            category_id=10,
+            category_name="Delegates",
+        )
+    )
+    db.commit()
+    user = create_test_user(db, username="schedule_user", event_id=event.id)
+    client = _make_client(db, user)
+
+    r = client.get(f"/api/v1/calendar/{event.id}")
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["public_schedule_views"] == [
+        {"id": 10, "name": "Delegates", "sort_order": 0.0},
+    ]
+    assert data["public_schedule_items"][0]["category_id"] == 10
 
 
 def test_get_calendar_unauthenticated(db):

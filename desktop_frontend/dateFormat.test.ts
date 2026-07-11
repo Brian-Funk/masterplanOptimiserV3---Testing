@@ -7,6 +7,7 @@ import {
   formatDateWithWeekday,
   formatDateLong,
   formatDateTime,
+  formatLocalDateTime,
 } from "@/lib/dateFormat";
 
 describe("formatDateShort", () => {
@@ -52,5 +53,13 @@ describe("formatDateTime", () => {
   it("pads hours and minutes", () => {
     const result = formatDateTime("2026-01-05T08:05:00");
     expect(result).toBe("05.01.2026 08:05");
+  });
+
+});
+
+describe("formatLocalDateTime", () => {
+  it("preserves event-local wall time when an imported value has an offset", () => {
+    const result = formatLocalDateTime("2026-08-01T23:30:00-10:00");
+    expect(result).toBe("01.08.2026 23:30");
   });
 });

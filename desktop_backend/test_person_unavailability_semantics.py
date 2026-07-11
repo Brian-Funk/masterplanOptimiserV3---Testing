@@ -14,8 +14,10 @@ from app.core.normalizer_optimization import (
     OptimizationTask,
     normalize_optimization_input,
 )
+from app.core.group_member_resolution import resolve_group_assignment_for_task
+from app.models.group import Group
 from app.models.task_template import TaskTemplate
-from desktop_backend.conftest import create_test_task_type
+from desktop_backend.conftest import create_test_event, create_test_task_type
 from fatigue_optimizer import OptimizationConfig, optimize_with_fatigue
 from flow_checker import NormPerson, NormTask, NormalizedFlowInput, check_flow
 
@@ -47,6 +49,54 @@ def _create_capability_template(db):
     db.commit()
     db.refresh(template)
     return template
+
+
+def _create_group(db, event_id, person_id):
+    group = Group(
+        event_id=event_id,
+        name="Availability group",
+        meta_data={"members": [{"type": "person", "id": person_id}]},
+    )
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    return group
+
+
+def test_group_resolution_does_not_shift_an_adjacent_day_interval(db):
+    event = create_test_event(db, name="Adjacent-day availability")
+    group = _create_group(db, event.id, 7)
+
+    resolved = resolve_group_assignment_for_task(
+        [{"type": "group", "id": group.id}],
+        db,
+        {7},
+        event_id=event.id,
+        person_unavailable_intervals={7: [(1980, 2040)]},
+        task_start=540,
+        task_end=600,
+    )
+
+    assert resolved.person_ids == [7]
+    assert resolved.excluded_persons == []
+
+
+def test_group_resolution_uses_linear_overnight_coordinates(db):
+    event = create_test_event(db, name="Overnight availability")
+    group = _create_group(db, event.id, 7)
+
+    resolved = resolve_group_assignment_for_task(
+        [{"type": "group", "id": group.id}],
+        db,
+        {7},
+        event_id=event.id,
+        person_unavailable_intervals={7: [(1500, 1560)]},
+        task_start=1515,
+        task_end=1545,
+    )
+
+    assert resolved.person_ids == []
+    assert [item.person_id for item in resolved.excluded_persons] == [7]
 
 
 def test_flow_api_scopes_one_off_unavailability_to_selected_day(db, client):

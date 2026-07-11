@@ -10,6 +10,7 @@ import {
 import {
   getActualDateForWorkingSlot,
   getScheduleDayBoundaryFromRange,
+  getWorkingDayEndDateTimeLimit,
   getWorkingDayForDateTime,
 } from "@/lib/workingDayBoundary";
 
@@ -191,6 +192,20 @@ describe("general schedule working-day dates", () => {
     );
     expect(getActualDateForWorkingSlot("2026-06-21", "04:00", boundary)).toBe(
       "2026-06-21",
+    );
+  });
+
+  it("extends final-day availability input to the configured overnight tail", () => {
+    const boundary = getScheduleDayBoundaryFromRange({
+      startHour: 6,
+      endHour: 28,
+    });
+
+    expect(getWorkingDayEndDateTimeLimit("2026-06-21", boundary)).toBe(
+      "2026-06-22T04:00",
+    );
+    expect(getWorkingDayEndDateTimeLimit("2026-06-21", { offsetHour: 0 })).toBe(
+      "2026-06-21T23:59",
     );
   });
 });

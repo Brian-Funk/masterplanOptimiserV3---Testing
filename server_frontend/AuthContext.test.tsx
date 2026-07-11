@@ -47,6 +47,7 @@ const mockUser = {
   is_activated: true,
   linked_person_id: null,
   event_id: 1,
+  offline_access_ttl_hours: 24,
 };
 
 beforeEach(() => {
@@ -120,6 +121,29 @@ describe("AuthContext", () => {
       expect(screen.getByTestId("status")).toHaveTextContent("offline");
       expect(screen.getByTestId("event")).toHaveTextContent("1");
     });
+  });
+
+  it("stores the configured offline cached view window in the local marker", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-21T09:30:00Z"));
+
+    try {
+      const marker = storeOfflineAccessForCalendar(
+        { ...mockUser, offline_access_ttl_hours: 3 },
+        1,
+      );
+
+      expect(marker.ttl_hours).toBe(3);
+      expect(marker.valid_until).toBe("2026-05-21T12:30:00.000Z");
+      expect(
+        JSON.parse(localStorage.getItem("mp-opt-offline-access") ?? "{}"),
+      ).toMatchObject({
+        ttl_hours: 3,
+        valid_until: "2026-05-21T12:30:00.000Z",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("identifies issuer role correctly", async () => {

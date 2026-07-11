@@ -23,6 +23,19 @@ def test_me_returns_user_with_valid_session(db, root_client):
     data = r.json()
     assert data["username"] == "root.admin"
     assert data["is_root_admin"] is True
+    assert data["offline_access_ttl_hours"] == 24
+
+
+def test_me_returns_configured_offline_access_window(db, root_client):
+    """GET /me returns the runtime offline cached view window."""
+    from app.core import runtime_settings
+
+    runtime_settings.set_value("offline_access_ttl_hours", 6, db)
+
+    r = root_client.get("/api/v1/auth/me")
+
+    assert r.status_code == 200
+    assert r.json()["offline_access_ttl_hours"] == 6
 
 
 def test_me_returns_issuer_fields(db):
@@ -206,6 +219,22 @@ def test_reauth_required_allows_with_reauth(db, reauth_admin_client):
     # Event does not exist, so 404 proves the auth check passed.
     r = reauth_admin_client.delete("/api/v1/admin/events/9999")
     assert r.status_code == 404  # past the auth check
+
+
+# ── Security settings ──
+
+
+def test_admin_settings_exposes_offline_access_window(db, admin_client):
+    """GET /admin/settings includes the offline cached view window."""
+    r = admin_client.get("/api/v1/admin/settings")
+
+    assert r.status_code == 200
+    setting = r.json()["offline_access_ttl_hours"]
+    assert setting["value"] == 24
+    assert setting["default"] == 24
+    assert setting["unit"] == "hours"
+    assert setting["min"] == 1
+    assert setting["max"] == 24
 
 
 # ── Logout ──

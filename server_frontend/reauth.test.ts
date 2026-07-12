@@ -60,7 +60,7 @@ describe("performReauth", () => {
     // complete was called with credential
     expect(mockFetch.mock.calls[1][0]).toContain("/admin/reauth/complete");
     const completeBody = JSON.parse(mockFetch.mock.calls[1][1].body);
-    expect(completeBody.id).toBe("cred-1");
+    expect(completeBody.credential.id).toBe("cred-1");
     expect(completeBody.ceremony_id).toBe(91);
   });
 

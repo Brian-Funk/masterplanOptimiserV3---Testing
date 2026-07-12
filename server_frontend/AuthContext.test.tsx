@@ -123,6 +123,25 @@ describe("AuthContext", () => {
     });
   });
 
+  it("treats an upstream 503 as offline uncertainty instead of logout", async () => {
+    storeOfflineAccessForCalendar(mockUser, 1);
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 503 });
+
+    function OfflineConsumer() {
+      const { authStatus, offlineAccess, isLoading } = useAuth();
+      if (isLoading) return <div>Loading...</div>;
+      return <div>{`${authStatus}:${offlineAccess?.event_id ?? "none"}`}</div>;
+    }
+
+    render(
+      <AuthProvider>
+        <OfflineConsumer />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByText("offline:1")).toBeInTheDocument();
+  });
+
   it("stores the configured offline cached view window in the local marker", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-21T09:30:00Z"));

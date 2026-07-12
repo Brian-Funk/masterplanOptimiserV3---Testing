@@ -42,4 +42,12 @@ describe("service worker offline shell", () => {
     expect(source).toContain("networkFirstNavigation(event.request)");
     expect(source).not.toContain('caches.match("/")');
   });
+
+  it("never stores authenticated API responses in Cache Storage", () => {
+    const source = serviceWorkerSource();
+
+    expect(source).not.toContain('url.pathname.startsWith("/api/")');
+    expect(source).not.toContain("mp-opt-offline-api");
+    expect(source).not.toContain("cache.put(event.request");
+  });
 });

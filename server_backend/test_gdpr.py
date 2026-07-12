@@ -7,12 +7,12 @@ from server_backend.conftest import (
 # ── GET /admin/users/{id}/export ──
 
 
-def test_gdpr_export(db, admin_client):
-    """Admin can export user data."""
+def test_gdpr_export(db, reauth_admin_client):
+    """A recently re-authenticated admin can export user data."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(db, username="exportme", event_id=event.id)
 
-    r = admin_client.get(f"/api/v1/admin/users/{user.id}/export")
+    r = reauth_admin_client.get(f"/api/v1/admin/users/{user.id}/export")
     assert r.status_code == 200
     data = r.json()
     assert data["user"]["username"] == "exportme"
@@ -20,9 +20,9 @@ def test_gdpr_export(db, admin_client):
     assert "credentials_count" in data
 
 
-def test_gdpr_export_not_found(db, admin_client):
+def test_gdpr_export_not_found(db, reauth_admin_client):
     """Export for non-existent user → 404."""
-    r = admin_client.get("/api/v1/admin/users/99999/export")
+    r = reauth_admin_client.get("/api/v1/admin/users/99999/export")
     assert r.status_code == 404
 
 
@@ -34,6 +34,17 @@ def test_gdpr_export_regular_user_blocked(db):
 
     r = client.get(f"/api/v1/admin/users/{user.id}/export")
     assert r.status_code == 403
+
+
+def test_gdpr_export_requires_reauthentication(db, admin_client):
+    """An ordinary admin session cannot export personal data without step-up."""
+    event, _ = create_test_event(db, name="Export Reauth")
+    user = create_test_user(db, username="export.reauth", event_id=event.id)
+
+    response = admin_client.get(f"/api/v1/admin/users/{user.id}/export")
+
+    assert response.status_code == 403
+    assert "Re-authentication required" in response.json()["detail"]
 
 
 # ── DELETE /admin/users/{id}/gdpr-delete (anonymise) ──

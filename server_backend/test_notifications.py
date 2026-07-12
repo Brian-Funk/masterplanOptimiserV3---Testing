@@ -82,6 +82,23 @@ def test_list_announcements(db):
     assert "Hello Everyone" in titles
 
 
+def test_list_announcements_cross_event_blocked(db):
+    """Changing an event id cannot reveal another event's announcements."""
+    own_event, _ = create_test_event(db, name="Own Announcements")
+    other_event, _ = create_test_event(db, name="Other Announcements")
+    user = create_test_user(
+        db,
+        username="announcement.viewer",
+        event_id=own_event.id,
+    )
+
+    response = _make_client(db, user).get(
+        f"/api/v1/notifications/announcements/{other_event.id}",
+    )
+
+    assert response.status_code == 403
+
+
 # ── DELETE /notifications/announcements/{id} ──
 
 

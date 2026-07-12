@@ -16,7 +16,7 @@ def test_create_activation_link(db, admin_client):
 
     r = admin_client.post(f"/api/v1/admin/users/{user.id}/activation-link")
     assert r.status_code == 200
-    assert "/activate?token=" in r.json()["activation_url"]
+    assert "/activate#token=" in r.json()["activation_url"]
 
 
 def test_create_activation_link_not_found(db, admin_client):
@@ -154,6 +154,38 @@ def test_activation_validate_token(db, admin_client):
     token = activation_url.split("token=")[1]
 
     # Validate
-    r2 = admin_client.post(f"/api/v1/activation/validate/{token}")
+    r2 = admin_client.post(
+        "/api/v1/activation/validate",
+        json={"token": token},
+    )
     # Should return user info (200) or the validation response.
     assert r2.status_code == 200
+
+
+def test_credential_reset_link_requires_recent_reauthentication(db):
+    """Creating a new passkey link for an active account is step-up protected."""
+    event, _ = create_test_event(db, name="Reset Event")
+    target = create_test_user(
+        db,
+        username="reset.target",
+        event_id=event.id,
+        is_activated=True,
+    )
+    admin = create_test_user(
+        db,
+        username="reset.admin",
+        event_id=event.id,
+        is_admin=True,
+    )
+
+    denied = _make_client(db, admin).post(
+        f"/api/v1/admin/users/{target.id}/activation-link",
+        json={},
+    )
+    allowed = _make_client(db, admin, reauth=True).post(
+        f"/api/v1/admin/users/{target.id}/activation-link",
+        json={},
+    )
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200

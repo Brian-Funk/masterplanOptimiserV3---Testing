@@ -6,6 +6,22 @@ from server_backend.conftest import (
 from app.models.audit import AuditLog
 
 
+def _add_exchange_code(db, user, raw_code: str = "exchange-code-with-enough-entropy"):
+    """Persist the digest form of a valid short-lived exchange code."""
+    import hashlib
+    from datetime import datetime, timedelta, timezone
+    from app.models.user import ExchangeCode
+
+    row = ExchangeCode(
+        code=hashlib.sha256(raw_code.encode()).hexdigest(),
+        user_id=user.id,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
+    )
+    db.add(row)
+    db.commit()
+    return raw_code, row
+
+
 # ── /api/v1/auth/me ──
 
 
@@ -303,7 +319,78 @@ def test_admin_settings_update_blocks_non_root_admin(db):
     assert r.json()["detail"] == "Root admin access required"
 
 
-# ── Logout ──
+# Exchange codes
+
+
+def test_exchange_code_is_hashed_and_single_use(db):
+    """A successful exchange creates one session and cannot be replayed."""
+    from app.models.user import AuthSession
+
+    event, _ = create_test_event(db, name="Exchange Event")
+    user = create_test_user(db, username="exchange.user", event_id=event.id)
+    raw_code, row = _add_exchange_code(db, user)
+    client = _raw_client()
+
+    first = client.post("/api/v1/auth/exchange", json={"code": raw_code})
+    second = client.post("/api/v1/auth/exchange", json={"code": raw_code})
+
+    assert row.code != raw_code
+    assert first.status_code == 200
+    assert "session_id=" in first.headers.get("set-cookie", "")
+    assert second.status_code == 400
+    assert db.query(AuthSession).filter(AuthSession.user_id == user.id).count() == 1
+
+
+def test_exchange_rejects_inactive_account(db):
+    """A valid one-time code cannot create a session for an inactive account."""
+    from app.models.user import AuthSession
+
+    user = create_test_user(db, username="exchange.inactive")
+    user.is_active = False
+    db.commit()
+    raw_code, _ = _add_exchange_code(db, user)
+
+    response = _raw_client().post(
+        "/api/v1/auth/exchange",
+        json={"code": raw_code},
+    )
+
+    assert response.status_code == 400
+    assert db.query(AuthSession).filter(AuthSession.user_id == user.id).count() == 0
+
+
+def test_issuer_receives_privileged_session_lifetime(db):
+    """Issuer sessions use the short privileged session policy."""
+    from datetime import datetime, timezone
+    from app.core import runtime_settings
+    from app.models.user import AuthSession
+
+    runtime_settings.set_value("session_ttl_hours", 8, db)
+    runtime_settings.set_value("session_ttl_hours_admin", 1, db)
+    event, _ = create_test_event(db, name="Issuer Session")
+    issuer = create_test_user(
+        db,
+        username="exchange.issuer",
+        event_id=event.id,
+        is_issuer=True,
+    )
+    raw_code, _ = _add_exchange_code(db, issuer)
+
+    response = _raw_client().post(
+        "/api/v1/auth/exchange",
+        json={"code": raw_code},
+    )
+
+    assert response.status_code == 200
+    session = db.query(AuthSession).filter(AuthSession.user_id == issuer.id).one()
+    expires_at = session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    remaining_seconds = (expires_at - datetime.now(timezone.utc)).total_seconds()
+    assert 0 < remaining_seconds <= 3600
+
+
+# Logout
 
 
 def test_logout_clears_session(db, admin_client):
@@ -315,8 +402,8 @@ def test_logout_clears_session(db, admin_client):
     assert r2.status_code == 401
 
 
-def test_logout_accepts_empty_post_without_content_type(db):
-    """Logout is hotfix-safe for old clients that send an empty POST."""
+def test_logout_rejects_missing_csrf_token(db):
+    """A cross-site logout request cannot revoke a browser session."""
     event, _ = create_test_event(db, name="Logout Event")
     user = create_test_user(db, username="logout.user", is_admin=True, event_id=event.id)
     raw_token, csrf_token = inject_session(db, user)
@@ -324,12 +411,9 @@ def test_logout_accepts_empty_post_without_content_type(db):
 
     r = client.post("/api/v1/auth/logout")
 
-    assert r.status_code == 200
-    assert r.headers.get("cache-control") == "no-store"
-    set_cookie = r.headers.get("set-cookie", "")
-    assert "session_id=" in set_cookie
-    assert "csrf_token=" in set_cookie
-    assert client.get("/api/v1/auth/me").status_code == 401
+    assert r.status_code == 403
+    assert r.json()["detail"] == "CSRF token missing or invalid"
+    assert client.get("/api/v1/auth/me").status_code == 200
 
 
 def test_logout_audits_user_before_revoking_session(db):
@@ -339,7 +423,10 @@ def test_logout_audits_user_before_revoking_session(db):
     raw_token, csrf_token = inject_session(db, user)
     client = _raw_client(
         cookies={"session_id": raw_token, "csrf_token": csrf_token},
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrf_token,
+        },
     )
 
     r = client.post("/api/v1/auth/logout", json={})

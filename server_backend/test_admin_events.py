@@ -101,6 +101,26 @@ def test_delete_event_cascade(db, reauth_admin_client):
     assert remaining is None
 
 
+def test_delete_event_preserves_privileged_accounts(db, reauth_admin_client):
+    """Event deletion cannot indirectly delete an admin or issuer account."""
+    event, _ = create_test_event(db, name="Privileged Event")
+    privileged = create_test_user(
+        db,
+        username="event.issuer",
+        event_id=event.id,
+        is_issuer=True,
+    )
+    privileged_client = _make_client(db, privileged)
+
+    response = reauth_admin_client.delete(f"/api/v1/admin/events/{event.id}")
+
+    assert response.status_code == 200
+    db.refresh(privileged)
+    assert privileged.event_id is None
+    assert privileged.is_issuer is True
+    assert privileged_client.get("/api/v1/auth/me").status_code == 401
+
+
 def test_delete_event_not_found(db, reauth_admin_client):
     """Deleting non-existent event → 404."""
     r = reauth_admin_client.delete("/api/v1/admin/events/99999")

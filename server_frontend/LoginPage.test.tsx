@@ -379,7 +379,7 @@ describe("LoginPage", () => {
       String(url).includes("/api/v1/passkey/auth/complete"),
     );
     const completeBody = JSON.parse(completeCall?.[1].body);
-    expect(completeBody.id).toBe("cred-1");
+    expect(completeBody.credential.id).toBe("cred-1");
     expect(completeBody.ceremony_id).toBe(42);
 
     const beginCall = mockFetch.mock.calls.find(([url]) =>

@@ -148,6 +148,7 @@ describe("BootstrapPage", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );
@@ -162,8 +163,11 @@ describe("BootstrapPage", () => {
     });
 
     const completeBody = JSON.parse(mockFetch.mock.calls[2][1].body);
-    expect(completeBody.id).toBe("cred-1");
+    expect(completeBody.credential.id).toBe("cred-1");
     expect(completeBody.ceremony_id).toBe(77);
+    expect(mockFetch.mock.calls[1][1].headers["X-Bootstrap-Token"]).toBe(
+      "b".repeat(32),
+    );
   });
 
   it("navigates to login after successful registration", async () => {
@@ -191,6 +195,7 @@ describe("BootstrapPage", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );
@@ -225,6 +230,7 @@ describe("BootstrapPage", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );
@@ -258,6 +264,7 @@ describe("BootstrapPage", () => {
     mockStartRegistration.mockRejectedValueOnce(notAllowedError);
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );

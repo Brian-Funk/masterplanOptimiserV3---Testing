@@ -2,6 +2,7 @@
 from server_backend.conftest import (
     create_test_event, create_test_user, inject_session, _make_client,
 )
+from app.models.published import PublishedPerson
 
 
 # ── POST /admin/users (create user) ──
@@ -21,7 +22,7 @@ def test_create_user_happy_path(db, admin_client):
     data = r.json()
     assert data["user"]["username"] == "new.user"
     assert data["user"]["is_activated"] is False
-    assert "/activate?token=" in data["activation_url"]
+    assert "/activate#token=" in data["activation_url"]
 
 
 def test_create_user_duplicate_username(db, admin_client):
@@ -111,8 +112,8 @@ def test_only_root_can_set_issuer(db, admin_client):
     assert r.status_code == 403
 
 
-def test_root_can_set_issuer(db, root_client):
-    """Root admin can grant issuer role."""
+def test_root_role_grant_requires_reauthentication(db, root_client):
+    """A root session without step-up authentication cannot grant roles."""
     event, _ = create_test_event(db, name="Evt")
     r = root_client.post("/api/v1/admin/users", json={
         "username": "new_issuer",
@@ -120,8 +121,29 @@ def test_root_can_set_issuer(db, root_client):
         "event_id": event.id,
         "is_issuer": True,
     })
-    assert r.status_code == 200
-    assert r.json()["user"]["is_issuer"] is True
+    assert r.status_code == 403
+
+
+def test_reauthenticated_root_can_set_issuer(db):
+    """A recently re-authenticated root can grant issuer role."""
+    event, _ = create_test_event(db, name="Issuer Grant Event")
+    root = create_test_user(
+        db,
+        username="roles.root",
+        is_root_admin=True,
+        is_admin=True,
+    )
+    client = _make_client(db, root, reauth=True)
+
+    response = client.post("/api/v1/admin/users", json={
+        "username": "new_issuer",
+        "display_name": "New Issuer",
+        "event_id": event.id,
+        "is_issuer": True,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["user"]["is_issuer"] is True
 
 
 # ── GET /admin/users ──
@@ -240,6 +262,118 @@ def test_update_issuer_cross_event_blocked(db):
         "display_name": "Should Fail",
     })
     assert r.status_code == 403
+
+
+def test_non_root_admin_cannot_modify_privileged_account(db):
+    """Changing status cannot bypass root-only role management."""
+    event, _ = create_test_event(db, name="Privilege Event")
+    target = create_test_user(
+        db,
+        username="privileged.target",
+        event_id=event.id,
+        is_admin=True,
+    )
+    actor = create_test_user(
+        db,
+        username="privileged.actor",
+        event_id=event.id,
+        is_admin=True,
+    )
+
+    response = _make_client(db, actor).put(
+        f"/api/v1/admin/users/{target.id}",
+        json={"is_active": False},
+    )
+
+    assert response.status_code == 403
+    db.refresh(target)
+    assert target.is_active is True
+
+
+def test_deactivating_user_requires_recent_reauthentication(db):
+    """Account deactivation is denied until the admin steps up with a passkey."""
+    event, _ = create_test_event(db, name="Deactivate Event")
+    actor = create_test_user(db, username="deactivate.admin", is_admin=True)
+    target = create_test_user(db, username="deactivate.target", event_id=event.id)
+
+    denied = _make_client(db, actor).put(
+        f"/api/v1/admin/users/{target.id}",
+        json={"is_active": False},
+    )
+    allowed = _make_client(db, actor, reauth=True).put(
+        f"/api/v1/admin/users/{target.id}",
+        json={"is_active": False},
+    )
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json()["is_active"] is False
+
+
+def test_update_user_rejects_person_from_another_event(db):
+    """The generic update route cannot link a user to another event's person."""
+    own_event, _ = create_test_event(db, name="Own Person Event")
+    other_event, _ = create_test_event(db, name="Other Person Event")
+    target = create_test_user(db, username="person.target", event_id=own_event.id)
+    actor = create_test_user(db, username="person.admin", is_admin=True)
+    db.add(PublishedPerson(
+        event_id=other_event.id,
+        external_person_id=91,
+        first_name="Other",
+        last_name="Person",
+    ))
+    db.commit()
+
+    response = _make_client(db, actor).put(
+        f"/api/v1/admin/users/{target.id}",
+        json={"linked_person_id": 91},
+    )
+
+    assert response.status_code == 404
+    db.refresh(target)
+    assert target.linked_person_id is None
+
+
+def test_event_reassignment_clears_stale_person_link(db):
+    """Moving a user to another event cannot retain the old person identity."""
+    first_event, _ = create_test_event(db, name="First Link Event")
+    second_event, _ = create_test_event(db, name="Second Link Event")
+    actor = create_test_user(db, username="move.admin", is_admin=True)
+    target = create_test_user(db, username="move.target", event_id=first_event.id)
+    target.linked_person_id = 42
+    db.commit()
+
+    response = _make_client(db, actor).put(
+        f"/api/v1/admin/users/{target.id}",
+        json={"event_id": second_event.id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["event_id"] == second_event.id
+    assert response.json()["linked_person_id"] is None
+
+
+def test_issuer_cannot_delete_another_issuer(db):
+    """Issuer-scoped deletion cannot remove a peer privileged account."""
+    event, _ = create_test_event(db, name="Issuer Boundary")
+    actor = create_test_user(
+        db,
+        username="issuer.actor",
+        event_id=event.id,
+        is_issuer=True,
+    )
+    target = create_test_user(
+        db,
+        username="issuer.target",
+        event_id=event.id,
+        is_issuer=True,
+    )
+
+    response = _make_client(db, actor, reauth=True).delete(
+        f"/api/v1/admin/users/{target.id}",
+    )
+
+    assert response.status_code == 403
 
 
 # ── DELETE /admin/users/{id} ──

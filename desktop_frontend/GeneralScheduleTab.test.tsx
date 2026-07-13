@@ -4,6 +4,7 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GeneralScheduleTab } from "@/app/dashboard/admin/tabs/GeneralScheduleTab";
+import { buildGeneralSchedulePublicFingerprint } from "@/lib/generalSchedule";
 
 const mocks = vi.hoisted(() => ({
   getSessionElementTypes: vi.fn(),
@@ -66,7 +67,7 @@ const publicElement = {
   responsible_text: null,
   attendee_team_ids: [],
   schedule_view_ids: [20],
-  visibility: "public",
+  visibility: "public" as const,
   description: null,
   sort_order: 0,
 };
@@ -142,5 +143,65 @@ describe("GeneralScheduleTab publishing", () => {
     await waitFor(() =>
       expect(mocks.publishGeneralSchedule).toHaveBeenCalledWith(7, undefined),
     );
+  });
+
+  it("keeps the publish action green when changes are pending", async () => {
+    mocks.getPublishState.mockResolvedValue({
+      event_id: 7,
+      item_count: 1,
+      day_records: {
+        "2026-08-01": {
+          fingerprint: "previous-fingerprint",
+          published_at: "2026-07-13T10:00:00Z",
+          publish_failed_at: null,
+          failure_message: null,
+          item_count: 1,
+        },
+      },
+    });
+
+    render(<GeneralScheduleTab selectedEvent={selectedEvent} />);
+
+    expect(await screen.findByText("Changes pending")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toHaveClass(
+      "bg-green-600",
+    );
+  });
+
+  it("shows an unchanged published day as up to date", async () => {
+    const fingerprint = await buildGeneralSchedulePublicFingerprint(
+      [publicElement],
+      [],
+      [],
+      [],
+      [
+        {
+          id: 1,
+          event_id: 7,
+          name: "Session",
+          colour: "#7dd3fc",
+          sort_order: 0,
+        },
+      ],
+      [{ id: 20, event_id: 7, name: "Public", sort_order: 0 }],
+    );
+    mocks.getPublishState.mockResolvedValue({
+      event_id: 7,
+      item_count: 1,
+      day_records: {
+        "2026-08-01": {
+          fingerprint,
+          published_at: "2026-07-13T10:00:00Z",
+          publish_failed_at: null,
+          failure_message: null,
+          item_count: 1,
+        },
+      },
+    });
+
+    render(<GeneralScheduleTab selectedEvent={selectedEvent} />);
+
+    expect(await screen.findByText("Up to date")).toBeInTheDocument();
+    expect(screen.queryByText("Changes pending")).not.toBeInTheDocument();
   });
 });

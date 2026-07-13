@@ -136,6 +136,29 @@ describe("general schedule templates", () => {
     expect(source[0].title).toBe("Opening Briefing");
   });
 
+  it("orders fingerprint items by stable id rather than display collation", () => {
+    const source = JSON.parse(
+      buildGeneralSchedulePublicFingerprintSource(
+        [
+          { ...element, id: 12, title: "First by display", sort_order: 10 },
+          { ...element, id: 10, title: "Second by display", sort_order: 5 },
+        ],
+        teams,
+        locations,
+        persons,
+        types,
+        [{ ...scheduleViews[0], sort_order: 2 }],
+      ),
+    );
+
+    expect(source.map((item: { id: number }) => item.id)).toEqual([10, 12]);
+    expect(source.map((item: { sort_order: number }) => item.sort_order)).toEqual([
+      5,
+      10,
+    ]);
+    expect(source[0].schedule_views[0].sort_order).toBe(2);
+  });
+
   it("renders copied elements as separate text and HTML lines", () => {
     const secondElement = {
       ...element,

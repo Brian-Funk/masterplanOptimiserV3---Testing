@@ -1,5 +1,8 @@
 """Tests for MP-Backend publish day scoping."""
 
+import hashlib
+import json
+
 import app.api.v1.mp_backend as mp_backend_module
 from app.models.task import Task
 from app.models.general_schedule import (
@@ -54,6 +57,65 @@ class FakeAsyncClient:
     async def post(self, url, headers, json):
         self.captured_payloads.append(json)
         return FakeMpBackendResponse(json)
+
+
+def test_public_schedule_fingerprint_matches_browser_number_serialisation():
+    """Whole-number database floats hash exactly like browser JSON numbers."""
+    items = [
+        {
+            "id": 2,
+            "title": "Second",
+            "date": "2026-08-01",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "location_name": "No location",
+            "schedule_view_ids": [20],
+            "schedule_view_names": ["Board"],
+            "schedule_view_sort_orders": {"20": 2.0},
+            "responsible": " ",
+            "description": "",
+            "colour": "#7dd3fc",
+            "copy_template_html": "",
+            "sort_order": 10.0,
+        },
+        {
+            "id": 1,
+            "title": "First",
+            "date": "2026-08-01",
+            "start_time": "09:00",
+            "end_time": "10:00",
+            "location_name": "No location",
+            "schedule_view_ids": [20],
+            "schedule_view_names": ["Board"],
+            "schedule_view_sort_orders": {"20": 2.0},
+            "colour": "#7dd3fc",
+            "sort_order": 5.0,
+        },
+    ]
+    browser_payload = [
+        {
+            "id": item["id"],
+            "title": item["title"],
+            "type_id": None,
+            "date": item["date"],
+            "start_time": item["start_time"],
+            "end_time": item["end_time"],
+            "location_name": "No location",
+            "audience_teams": [],
+            "schedule_views": [{"id": 20, "name": "Board", "sort_order": 2}],
+            "responsible": None,
+            "description": None,
+            "colour": "#7dd3fc",
+            "copy_template_html": None,
+            "sort_order": sort_order,
+        }
+        for item, sort_order in ((items[1], 5), (items[0], 10))
+    ]
+    source = json.dumps(browser_payload, ensure_ascii=False, separators=(",", ":"))
+
+    assert mp_backend_module._general_schedule_fingerprint(items) == hashlib.sha256(
+        source.encode("utf-8")
+    ).hexdigest()
 
 
 def create_publish_task(db, event_id, task_type_id, title, day):

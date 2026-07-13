@@ -66,6 +66,23 @@ def test_create_user_issuer_forces_own_event(db):
     assert data["user"]["event_id"] == event.id
 
 
+def test_create_user_issuer_can_omit_event_id(db):
+    """Issuer user creation may omit event_id because it is server-scoped."""
+    event, _ = create_test_event(db, name="IssuerEvt")
+    issuer = create_test_user(
+        db, username="iss_creator_no_event", is_issuer=True, event_id=event.id,
+    )
+    client = _make_client(db, issuer)
+
+    r = client.post("/api/v1/admin/users", json={
+        "username": "created_without_event",
+        "display_name": "User Without Event",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["user"]["event_id"] == event.id
+
+
 def test_create_user_issuer_cannot_grant_admin(db):
     """Issuer cannot set is_admin on new users."""
     event, _ = create_test_event(db, name="Evt")
@@ -98,6 +115,66 @@ def test_create_user_issuer_cannot_grant_issuer(db):
         "is_issuer": True,
     })
     assert r.status_code == 403
+
+
+def test_bulk_create_users_partial_success_and_tags(db, admin_client):
+    """Bulk creation creates valid rows and reports invalid rows."""
+    event, _ = create_test_event(db, name="BulkEvt")
+    create_test_user(db, username="taken.user", event_id=event.id)
+
+    r = admin_client.post("/api/v1/admin/users/bulk", json={
+        "event_id": event.id,
+        "bulk_tags": ["board", "event"],
+        "users": [
+            {
+                "username": "alpha.tester",
+                "display_name": "Alpha Tester",
+                "email": "alpha@example.test",
+                "can_edit": True,
+                "tags": ["speaker"],
+            },
+            {
+                "username": "taken.user",
+                "display_name": "Taken User",
+            },
+            {
+                "username": "alpha.tester",
+                "display_name": "Duplicate Batch User",
+            },
+        ],
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert [u["username"] for u in data["created"]] == ["alpha.tester"]
+    assert data["created"][0]["event_id"] == event.id
+    assert data["created"][0]["can_edit"] is True
+    assert data["created"][0]["tags"] == ["board", "event", "speaker"]
+    assert {error["index"] for error in data["errors"]} == {1, 2}
+
+
+def test_bulk_create_users_issuer_forces_own_event(db):
+    """Issuer bulk creation ignores requested event and uses own event."""
+    event, _ = create_test_event(db, name="IssuerBulkEvt")
+    other_event, _ = create_test_event(db, name="OtherBulkEvt")
+    issuer = create_test_user(
+        db, username="iss_bulk_creator", is_issuer=True, event_id=event.id,
+    )
+    client = _make_client(db, issuer)
+
+    r = client.post("/api/v1/admin/users/bulk", json={
+        "event_id": other_event.id,
+        "bulk_tags": ["issuer"],
+        "users": [
+            {"username": "issuer.bulk.one", "display_name": "Issuer Bulk One"},
+            {"username": "issuer.bulk.two", "display_name": "Issuer Bulk Two"},
+        ],
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["created"]) == 2
+    assert {u["event_id"] for u in data["created"]} == {event.id}
+    assert all(not u["is_admin"] and not u["is_issuer"] for u in data["created"])
+    assert data["created"][0]["tags"] == ["issuer"]
 
 
 def test_only_root_can_set_issuer(db, admin_client):

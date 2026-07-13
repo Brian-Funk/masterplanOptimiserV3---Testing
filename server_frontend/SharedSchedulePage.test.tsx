@@ -88,7 +88,7 @@ describe("SharedSchedulePage", () => {
     await user.dblClick(
       screen.getByRole("button", { name: "View details for Opening Briefing" }),
     );
-    expect(screen.getByText("Room A, 1 Parliament Square")).toBeInTheDocument();
+    expect(screen.getByText("Room A - 1 Parliament Square")).toBeInTheDocument();
     expect(screen.getByText("Session president")).toBeInTheDocument();
     expect(screen.getByText("Bring laptops.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close schedule details" }));

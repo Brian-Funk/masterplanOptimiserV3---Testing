@@ -58,7 +58,7 @@ describe("PublicScheduleCalendarGrid", () => {
     expect(
       screen.getByRole("dialog", { name: "Opening Briefing" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Room A, 1 Parliament Square")).toBeInTheDocument();
+    expect(screen.getByText("Room A - 1 Parliament Square")).toBeInTheDocument();
     expect(screen.getByText("Session president")).toBeInTheDocument();
     expect(screen.getByText("Briefing")).toBeInTheDocument();
     expect(screen.getAllByText("DEL").length).toBeGreaterThan(0);

@@ -18,7 +18,8 @@ if str(_SERVER_BACKEND) not in sys.path:
 
 from app.core.rate_limit import limiter
 from app.db.database import Base, SessionLocal, engine
-from app.main import app  # noqa: F401 - imports every model into Base metadata
+from app.main import app  # noqa: F401
+from app.models.server_setting import ServerSetting  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

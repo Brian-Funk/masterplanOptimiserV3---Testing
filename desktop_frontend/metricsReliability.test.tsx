@@ -504,6 +504,8 @@ describe("metric registry coverage", () => {
       "average_working_hours",
       "absolute_working_hours",
       "max_working_hours",
+      "minimum_sleeping_hours",
+      "sleeping_hours",
       "workload_spider",
       "fairness",
       "task_type_count_spider",

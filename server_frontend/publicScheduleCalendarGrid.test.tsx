@@ -5,6 +5,21 @@ import React from "react";
 
 import { PublicScheduleCalendarGrid } from "@/components/PublicScheduleCalendarGrid";
 
+function fireTouchPointerEvent(
+  target: Element,
+  type: "pointerdown" | "pointerup",
+  { clientX, clientY }: { clientX: number; clientY: number },
+) {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+  });
+  Object.defineProperty(event, "pointerType", { value: "touch" });
+  fireEvent(target, event);
+}
+
 describe("PublicScheduleCalendarGrid", () => {
   const detailedItem = {
     id: 1,
@@ -91,13 +106,11 @@ describe("PublicScheduleCalendarGrid", () => {
     fireEvent.mouseDown(backdrop!);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    fireEvent.pointerDown(trigger, {
-      pointerType: "touch",
+    fireTouchPointerEvent(trigger, "pointerdown", {
       clientX: 10,
       clientY: 10,
     });
-    fireEvent.pointerUp(trigger, {
-      pointerType: "touch",
+    fireTouchPointerEvent(trigger, "pointerup", {
       clientX: 10,
       clientY: 10,
     });

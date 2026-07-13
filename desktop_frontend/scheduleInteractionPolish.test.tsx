@@ -1,5 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Calendar from "@/components/Calendar";
 import { EventConfigSection } from "@/app/dashboard/settings/components/EventConfigSection";
@@ -52,6 +58,16 @@ const scheduledTask = {
   fields: {},
   field_definitions: [],
 };
+
+function createDataTransfer() {
+  const values = new Map<string, string>();
+  return {
+    dropEffect: "none",
+    effectAllowed: "all",
+    getData: (type: string) => values.get(type) ?? "",
+    setData: (type: string, value: string) => values.set(type, value),
+  } as DataTransfer;
+}
 
 describe("schedule day range", () => {
   beforeEach(() => {
@@ -137,6 +153,119 @@ describe("schedule day range", () => {
       time: "08:30",
     });
   });
+
+  it.each([
+    ["top", 110, "before", "09:30", 570],
+    ["middle", 145, "align_start", "10:00", 600],
+    ["bottom", 180, "after", "11:00", 660],
+  ])(
+    "places a task from the %s third of another task",
+    (
+      _third,
+      clientY,
+      expectedPlacement,
+      expectedTime,
+      expectedWorkingMinutes,
+    ) => {
+      const onTaskDrop = vi.fn();
+      const sourceTask = {
+        ...scheduledTask,
+        id: 1,
+        name: "Source",
+        start_end_time: { start: "08:00", end: "08:30" },
+      };
+      const targetTask = {
+        ...scheduledTask,
+        id: 2,
+        name: "Target",
+        start_end_time: { start: "10:00", end: "11:00" },
+      };
+      const { container } = render(
+        <Calendar
+          tasks={[sourceTask, targetTask]}
+          viewType="daily"
+          selectedDate="2026-08-01"
+          onTaskEdit={vi.fn()}
+          onTaskDrop={onTaskDrop}
+          enableTaskRelativeDrop
+          scheduleDayRange={{ startHour: 7, endHour: 12 }}
+        />,
+      );
+      const source = container.querySelector('[data-task-id="1"]');
+      expect(source).not.toBeNull();
+      const dataTransfer = createDataTransfer();
+
+      fireEvent.dragStart(source as Element, { dataTransfer });
+      const target = container.querySelector('[data-task-id="2"]');
+      expect(target).not.toBeNull();
+      vi.spyOn(target as Element, "getBoundingClientRect").mockReturnValue({
+        top: 100,
+        bottom: 190,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: 90,
+        x: 0,
+        y: 100,
+        toJSON: () => ({}),
+      });
+
+      const dragOverEvent = createEvent.dragOver(target as Element, {
+        dataTransfer,
+      });
+      const dropEvent = createEvent.drop(target as Element, { dataTransfer });
+      Object.defineProperty(dragOverEvent, "clientY", { value: clientY });
+      Object.defineProperty(dropEvent, "clientY", { value: clientY });
+      fireEvent(target as Element, dragOverEvent);
+      expect(
+        target?.querySelector(
+          `[data-relative-drop-placement="${expectedPlacement}"]`,
+        ),
+      ).not.toBeNull();
+      fireEvent(target as Element, dropEvent);
+
+      expect(onTaskDrop).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+        expectedTime,
+        undefined,
+        "2026-08-01",
+        expectedWorkingMinutes,
+      );
+    },
+  );
+
+  it.each([
+    ["sidebar", "calendar-time-sidebar-slot-9-30", "09:30"],
+    ["open calendar slot", "calendar-grid-slot-9-00", "09:00"],
+  ])(
+    "keeps the existing %s drop behaviour",
+    (_dropArea, testId, expectedTime) => {
+      const onTaskDrop = vi.fn();
+      const { container } = render(
+        <Calendar
+          tasks={[scheduledTask]}
+          viewType="daily"
+          selectedDate="2026-08-01"
+          onTaskEdit={vi.fn()}
+          onTaskDrop={onTaskDrop}
+          enableTaskRelativeDrop
+          scheduleDayRange={{ startHour: 8, endHour: 11 }}
+        />,
+      );
+      const source = container.querySelector('[data-task-id="1"]');
+      const dataTransfer = createDataTransfer();
+
+      fireEvent.dragStart(source as Element, { dataTransfer });
+      fireEvent.drop(screen.getByTestId(testId), { dataTransfer });
+
+      expect(onTaskDrop).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+        expectedTime,
+        undefined,
+        "2026-08-01",
+      );
+    },
+  );
 
   it("saves the event display range while preserving day aliases", async () => {
     apiMocks.eventsApi.update.mockResolvedValue({

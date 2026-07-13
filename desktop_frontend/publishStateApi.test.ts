@@ -65,7 +65,8 @@ describe("desktop publish state API", () => {
 
     expect(requests[0].url).toContain("/api/v1/publish-state/7");
     expect(requests[0].init?.method).toBe("PUT");
-    expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({
+    const requestBody = JSON.parse(String(requests[0].init?.body));
+    expect(requestBody).toMatchObject({
       published_schedule_scope: "all",
       day_records: {
         "2026-08-01": {
@@ -75,6 +76,8 @@ describe("desktop publish state API", () => {
       },
       last_publish_target: "both",
     });
+    expect(requestBody.day_records["2026-08-01"].failedAt).toBeNull();
+    expect(requestBody.day_records["2026-08-01"].failureMessage).toBeNull();
   });
 
   it("records failed publish metadata for affected days", async () => {

@@ -152,6 +152,61 @@ describe("publish preview derivation", () => {
     );
   });
 
+  it("allows retrying an otherwise publishable day after a previous failure", () => {
+    const preview = derivePublishPreview({
+      publishTarget: "mp-backend",
+      scope: "selected_day",
+      selectedDayId: "2026-08-01",
+      dayStatuses: [
+        dayStatus("2026-08-01", {
+          publishFailed: true,
+          failureMessage:
+            "MP-Backend server is not configured. Set it up in Settings first.",
+        }),
+      ],
+      taskInstances: [task(1, "2026-08-01")],
+      getDayLabel: labelDay,
+    });
+
+    expect(preview.canPublish).toBe(true);
+    expect(preview.blockingReasons).toEqual([]);
+    expect(preview.publishDays).toHaveLength(1);
+    expect(preview.days[0]).toMatchObject({
+      status: "ready",
+      isPublishable: true,
+      willPublish: true,
+    });
+    expect(preview.days[0].reason).toBe(
+      "Previous publish failed: MP-Backend server is not configured. Set it up in Settings first. Retrying is allowed.",
+    );
+  });
+
+  it("keeps current validation blockers after a previous failure", () => {
+    const preview = derivePublishPreview({
+      publishTarget: "mp-backend",
+      scope: "selected_day",
+      selectedDayId: "2026-08-01",
+      dayStatuses: [
+        dayStatus("2026-08-01", {
+          isPublishable: false,
+          publishFailed: true,
+          failureMessage: "MP-Backend was unavailable.",
+          conflictCount: 1,
+        }),
+      ],
+      taskInstances: [task(1, "2026-08-01")],
+      getDayLabel: labelDay,
+    });
+
+    expect(preview.canPublish).toBe(false);
+    expect(preview.days[0]).toMatchObject({
+      status: "has_conflicts",
+      isPublishable: false,
+      willPublish: false,
+      reason: "1 conflict found.",
+    });
+  });
+
   it("recognises already published days with human-readable timestamps", () => {
     const preview = derivePublishPreview({
       publishTarget: "mp-backend",

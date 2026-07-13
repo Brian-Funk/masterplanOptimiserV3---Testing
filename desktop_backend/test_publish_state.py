@@ -99,6 +99,44 @@ def test_publish_failure_updates_only_affected_days(db, client):
     assert payload["day_records"]["2026-08-02"]["failureMessage"] == "MP-Backend failed."
 
 
+def test_successful_publish_clears_day_failure_metadata(db, client):
+    """Saving a successful retry removes stale failure details for that day."""
+    event = create_test_event(db, name="Publish Retry Event")
+    client.post(
+        f"/api/v1/publish-state/{event.id}/failure",
+        json={
+            "day_ids": ["2026-08-01"],
+            "failed_at": "2026-08-01T16:20:00Z",
+            "failure_message": "MP-Backend failed.",
+            "last_publish_target": "mp-backend",
+        },
+    )
+
+    response = client.put(
+        f"/api/v1/publish-state/{event.id}",
+        json={
+            "published_schedule_scope": "partial",
+            "published_at": "2026-08-01T16:30:00Z",
+            "publish_failed_at": None,
+            "day_records": {
+                "2026-08-01": {
+                    "fingerprint": "day-1",
+                    "publishedAt": "2026-08-01T16:30:00Z",
+                    "failedAt": None,
+                    "failureMessage": None,
+                },
+            },
+            "last_publish_target": "mp-backend",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["publish_failed_at"] is None
+    assert payload["day_records"]["2026-08-01"]["failedAt"] is None
+    assert payload["day_records"]["2026-08-01"]["failureMessage"] is None
+
+
 def test_publish_state_clear_removes_event_metadata(db, client):
     """Clearing publish state returns the event to the default state."""
     event = create_test_event(db, name="Publish State Event")

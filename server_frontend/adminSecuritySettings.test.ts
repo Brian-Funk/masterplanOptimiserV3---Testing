@@ -48,4 +48,12 @@ describe("admin security settings", () => {
     expect(source).toContain('"masterplan_pushes_per_minute"');
     expect(source).toContain('"public_schedule_pushes_per_minute"');
   });
+
+  it("exposes the configurable passkey request limit", () => {
+    const source = adminPageSource();
+
+    expect(source).toContain('title: "Passkeys"');
+    expect(source).toContain('"passkey_requests_per_minute"');
+    expect(source).toContain("limited per activation or account session");
+  });
 });

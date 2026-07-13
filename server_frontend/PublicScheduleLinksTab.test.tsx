@@ -45,7 +45,7 @@ function installApi(links: unknown[] = []) {
         ],
       });
     }
-    if (options?.method === "POST") {
+    if (options?.method === "POST" && !path.endsWith("/invalidate")) {
       return jsonResponse({
         ...activeLink,
         share_url: "/shared-schedule#token=one-time-token-value",
@@ -107,7 +107,7 @@ describe("PublicScheduleLinksTab", () => {
     );
   });
 
-  it("edits permissions and permanently invalidates an active link", async () => {
+  it("edits permissions and invalidates an active link", async () => {
     installApi([activeLink]);
     const user = userEvent.setup();
     render(<PublicScheduleLinksTab eventId={7} />);
@@ -126,6 +126,30 @@ describe("PublicScheduleLinksTab", () => {
     await user.click(
       screen.getByRole("button", { name: "Confirm invalidating Shared with the board" }),
     );
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith(
+        "/api/v1/admin/events/7/public-schedule-links/5/invalidate",
+        { method: "POST" },
+      ),
+    );
+  });
+
+  it("permanently deletes a managed link", async () => {
+    installApi([activeLink]);
+    const user = userEvent.setup();
+    render(<PublicScheduleLinksTab eventId={7} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Permanently delete Shared with the board",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Confirm permanently deleting Shared with the board",
+      }),
+    );
+
     await waitFor(() =>
       expect(mockApiFetch).toHaveBeenCalledWith(
         "/api/v1/admin/events/7/public-schedule-links/5",

@@ -445,3 +445,128 @@ def test_general_schedule_publish_does_not_create_fallback_for_explicit_no_view_
     assert db.query(PublishedGeneralScheduleItem).filter(
         PublishedGeneralScheduleItem.event_id == event.id,
     ).count() == 0
+
+
+def test_general_schedule_date_scope_replaces_only_requested_working_day(db):
+    """A selected-day Public Schedule push preserves every other published day."""
+    event, secret = create_test_event(db, name="Scoped General Schedule")
+    client = _publish_client(secret)
+    base_payload = {
+        "fingerprint": "full-v1",
+        "schedule_views": [{"id": 10, "name": "Public", "sort_order": 0}],
+        "items": [
+            {
+                "id": 100,
+                "title": "Day One",
+                "date": "2026-08-01",
+                "start_time": "09:00",
+                "end_time": "10:00",
+                "schedule_view_ids": [10],
+                "schedule_view_names": ["Public"],
+            },
+            {
+                "id": 200,
+                "title": "Day Two",
+                "date": "2026-08-02",
+                "start_time": "09:00",
+                "end_time": "10:00",
+                "schedule_view_ids": [10],
+                "schedule_view_names": ["Public"],
+            },
+        ],
+    }
+    assert client.post(
+        "/api/v1/publish/general-schedule",
+        json=base_payload,
+    ).status_code == 200
+
+    scoped = client.post(
+        "/api/v1/publish/general-schedule",
+        json={
+            **base_payload,
+            "fingerprint": "day-one-v2",
+            "publish_scope": "dates",
+            "dates": ["2026-08-01"],
+            "items": [
+                {
+                    **base_payload["items"][0],
+                    "id": 101,
+                    "title": "Day One Updated",
+                },
+            ],
+        },
+    )
+
+    assert scoped.status_code == 200
+    rows = (
+        db.query(PublishedGeneralScheduleItem)
+        .filter(PublishedGeneralScheduleItem.event_id == event.id)
+        .order_by(PublishedGeneralScheduleItem.date)
+        .all()
+    )
+    assert [row.title for row in rows] == ["Day One Updated", "Day Two"]
+
+
+def test_general_schedule_date_scope_validates_working_day_membership(db):
+    """Items outside a requested working day cannot leak into a scoped push."""
+    _event, secret = create_test_event(db, name="Scoped Validation")
+    client = _publish_client(secret)
+
+    response = client.post(
+        "/api/v1/publish/general-schedule",
+        json={
+            "fingerprint": "invalid-scope",
+            "publish_scope": "dates",
+            "dates": ["2026-08-01"],
+            "schedule_views": [{"id": 10, "name": "Public"}],
+            "items": [
+                {
+                    "id": 200,
+                    "title": "Wrong Day",
+                    "date": "2026-08-02",
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "schedule_view_ids": [10],
+                    "schedule_view_names": ["Public"],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "outside the requested publish dates" in response.json()["detail"]
+
+
+def test_general_schedule_date_scope_includes_after_midnight_working_day(db):
+    """A post-midnight item is replaced with its configured preceding working day."""
+    event, secret = create_test_event(db, name="Overnight General Schedule")
+    client = _publish_client(secret)
+
+    response = client.post(
+        "/api/v1/publish/general-schedule",
+        json={
+            "fingerprint": "overnight",
+            "publish_scope": "dates",
+            "dates": ["2026-08-01"],
+            "working_day_offset_hour": 6,
+            "schedule_views": [{"id": 10, "name": "Public"}],
+            "items": [
+                {
+                    "id": 300,
+                    "title": "Night Session",
+                    "date": "2026-08-02",
+                    "start_time": "01:00",
+                    "end_time": "02:00",
+                    "schedule_view_ids": [10],
+                    "schedule_view_names": ["Public"],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    row = db.query(PublishedGeneralScheduleItem).filter(
+        PublishedGeneralScheduleItem.event_id == event.id,
+    ).one()
+    assert row.date == "2026-08-02"
+    assert row.title == "Night Session"

@@ -247,3 +247,85 @@ def test_session_element_type_can_delete_only_type_when_unused(db, client):
     )
     assert remaining.status_code == 200
     assert remaining.json() == []
+
+
+def test_bulk_update_replaces_public_views_and_audience_atomically(db, client):
+    """Bulk editing applies one view and audience selection to every chosen item."""
+    event = create_test_event(db)
+    type_id, _ = _create_type(client, event.id)
+    team_id = _create_team(client, event.id)
+    view_id = _create_view(client, event.id)
+    element_ids = []
+    for index in range(2):
+        response = client.post(
+            f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+            json={
+                "title": f"Session {index + 1}",
+                "date": "2026-08-01",
+                "start_time": f"{9 + index:02d}:00",
+                "end_time": f"{10 + index:02d}:00",
+                "session_element_type_id": type_id,
+            },
+        )
+        assert response.status_code == 201
+        element_ids.append(response.json()["id"])
+
+    updated = client.patch(
+        f"/api/v1/general-schedule/session-elements/bulk?event_id={event.id}",
+        json={
+            "element_ids": element_ids,
+            "schedule_view_ids": [view_id],
+            "attendee_team_ids": [team_id],
+        },
+    )
+
+    assert updated.status_code == 200
+    assert [item["id"] for item in updated.json()] == element_ids
+    assert all(item["schedule_view_ids"] == [view_id] for item in updated.json())
+    assert all(item["attendee_team_ids"] == [team_id] for item in updated.json())
+
+    rejected = client.patch(
+        f"/api/v1/general-schedule/session-elements/bulk?event_id={event.id}",
+        json={
+            "element_ids": [element_ids[0], 999999],
+            "schedule_view_ids": [],
+        },
+    )
+    assert rejected.status_code == 404
+    reloaded = client.get(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+    ).json()
+    assert all(item["schedule_view_ids"] == [view_id] for item in reloaded)
+
+
+def test_copy_elements_preserves_after_midnight_working_day_slots(db, client):
+    """Copying to a working day stores its after-midnight item on the next date."""
+    event = create_test_event(db)
+    event.meta_data = {
+        "schedule_day_range": {"startHour": 6, "endHour": 30},
+    }
+    db.commit()
+    type_id, _ = _create_type(client, event.id)
+    created = client.post(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+        json={
+            "title": "Night Session",
+            "date": "2026-08-02",
+            "start_time": "01:00",
+            "end_time": "02:00",
+            "session_element_type_id": type_id,
+        },
+    )
+    assert created.status_code == 201
+
+    copied = client.post(
+        f"/api/v1/general-schedule/session-elements/copy?event_id={event.id}",
+        json={
+            "element_ids": [created.json()["id"]],
+            "target_dates": ["2026-08-03"],
+        },
+    )
+
+    assert copied.status_code == 200
+    assert copied.json()[0]["date"] == "2026-08-04"
+    assert copied.json()[0]["start_time"] == "01:00"

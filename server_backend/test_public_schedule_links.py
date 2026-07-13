@@ -236,19 +236,43 @@ def test_expiry_and_invalidation_are_permanent(db, root_client):
     replacement = _create_link(root_client, event.id)
     replacement_id = replacement.json()["id"]
     replacement_token = _token_from_share_url(replacement.json()["share_url"])
-    invalidated = root_client.delete(
+    replacement_url = (
         f"/api/v1/admin/events/{event.id}/public-schedule-links/{replacement_id}"
+    )
+    invalidated = root_client.post(
+        f"{replacement_url}/invalidate"
     )
     assert invalidated.status_code == 200
     assert invalidated.json()["status"] == "invalidated"
     assert root_client.patch(
-        f"/api/v1/admin/events/{event.id}/public-schedule-links/{replacement_id}",
+        replacement_url,
         json={"description": "Cannot revive"},
     ).status_code == 409
     assert root_client.get(
         "/api/v1/public-schedule/shared",
         headers={"Authorization": f"Bearer {replacement_token}"},
     ).status_code == 404
+
+
+def test_links_can_be_permanently_deleted_in_any_state(db, root_client):
+    """Permanent deletion removes active and invalidated links from management."""
+    event = db.query(Event).filter(Event.name == "Root Event").one()
+    _seed_schedule(db, event.id)
+    active = _create_link(root_client, event.id).json()
+    invalidated = _create_link(root_client, event.id).json()
+    base_url = f"/api/v1/admin/events/{event.id}/public-schedule-links"
+
+    assert root_client.post(
+        f"{base_url}/{invalidated['id']}/invalidate"
+    ).status_code == 200
+    assert root_client.delete(f"{base_url}/{active['id']}").status_code == 204
+    assert root_client.delete(f"{base_url}/{invalidated['id']}").status_code == 204
+
+    listed = root_client.get(base_url)
+    assert listed.status_code == 200
+    assert listed.json() == []
+    assert db.query(PublicScheduleLink).count() == 0
+    assert db.query(PublicScheduleLinkView).count() == 0
 
 
 def test_shared_response_contains_only_public_programme_fields(db, root_client):
@@ -371,9 +395,11 @@ def test_link_actions_are_audited_without_raw_tokens(db, root_client):
         f"/api/v1/admin/events/{event.id}/public-schedule-links/{link_id}",
         json={"description": "Updated internal description"},
     )
-    root_client.delete(
-        f"/api/v1/admin/events/{event.id}/public-schedule-links/{link_id}"
+    link_url = f"/api/v1/admin/events/{event.id}/public-schedule-links/{link_id}"
+    root_client.post(
+        f"{link_url}/invalidate"
     )
+    root_client.delete(link_url)
 
     rows = (
         db.query(AuditLog)
@@ -385,6 +411,7 @@ def test_link_actions_are_audited_without_raw_tokens(db, root_client):
         "public_schedule_link.create",
         "public_schedule_link.update",
         "public_schedule_link.invalidate",
+        "public_schedule_link.delete",
     ]
     assert token not in " ".join(row.detail or "" for row in rows)
 

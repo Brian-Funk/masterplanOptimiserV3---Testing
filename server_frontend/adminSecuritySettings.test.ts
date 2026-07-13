@@ -40,4 +40,12 @@ describe("admin security settings", () => {
     expect(source).toContain("user?.is_root_admin");
     expect(source).toContain('tab === "security" && user?.is_root_admin');
   });
+
+  it("groups both desktop publishing limits in the security panel", () => {
+    const source = adminPageSource();
+
+    expect(source).toContain('title: "Desktop Publishing"');
+    expect(source).toContain('"masterplan_pushes_per_minute"');
+    expect(source).toContain('"public_schedule_pushes_per_minute"');
+  });
 });

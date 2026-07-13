@@ -77,8 +77,12 @@ def db() -> Generator[Session, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _override_db(db: Session):
-    """Override FastAPI's get_db dependency to use the test session."""
+def _override_db(db: Session, monkeypatch):
+    """Route dependencies and runtime-limit lookups to the test database."""
+    import app.db.database as database_module
+
+    monkeypatch.setattr(database_module, "SessionLocal", TestingSessionLocal)
+
     def _get_test_db():
         try:
             yield db

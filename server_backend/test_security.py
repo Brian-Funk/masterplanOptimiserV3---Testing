@@ -319,6 +319,75 @@ def test_admin_settings_update_blocks_non_root_admin(db):
     assert r.json()["detail"] == "Root admin access required"
 
 
+def test_root_configures_desktop_publish_rate_limits(db):
+    """Root settings change both desktop push limit providers at runtime."""
+    from app.core.rate_limit import runtime_limit
+
+    root = create_test_user(
+        db,
+        username="settings.publish",
+        is_root_admin=True,
+        is_admin=True,
+    )
+    client = _make_client(db, root, reauth=True)
+
+    before = client.get("/api/v1/admin/settings")
+    assert before.status_code == 200
+    for key in (
+        "masterplan_pushes_per_minute",
+        "public_schedule_pushes_per_minute",
+    ):
+        assert before.json()[key]["value"] == 5
+        assert before.json()[key]["min"] == 1
+        assert before.json()[key]["max"] == 120
+
+    updated = client.put(
+        "/api/v1/admin/settings",
+        json={
+            "settings": {
+                "masterplan_pushes_per_minute": 12,
+                "public_schedule_pushes_per_minute": 18,
+            }
+        },
+    )
+
+    assert updated.status_code == 200
+    assert set(updated.json()["updated"]) == {
+        "masterplan_pushes_per_minute",
+        "public_schedule_pushes_per_minute",
+    }
+    assert runtime_limit("masterplan_pushes_per_minute")() == "12/minute"
+    assert runtime_limit("public_schedule_pushes_per_minute")() == "18/minute"
+
+
+def test_root_rejects_desktop_publish_rate_limits_outside_bounds(db):
+    """Desktop push limits remain within the documented 1 to 120 range."""
+    root = create_test_user(
+        db,
+        username="settings.publish.invalid",
+        is_root_admin=True,
+        is_admin=True,
+    )
+    client = _make_client(db, root, reauth=True)
+
+    response = client.put(
+        "/api/v1/admin/settings",
+        json={
+            "settings": {
+                "masterplan_pushes_per_minute": 0,
+                "public_schedule_pushes_per_minute": 121,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["updated"] == []
+    assert {error["key"] for error in response.json()["errors"]} == {
+        "masterplan_pushes_per_minute",
+        "public_schedule_pushes_per_minute",
+    }
+
+
 # Exchange codes
 
 

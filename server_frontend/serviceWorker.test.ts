@@ -30,6 +30,7 @@ describe("service worker offline shell", () => {
 
     expect(entries).not.toContain("/offline");
     expect(entries).toContain("/calendar.html");
+    expect(entries).toContain("/shared-schedule.html");
     for (const entry of entries) {
       expect(existsSync(path.join(outDir, entry.replace(/^\//, "")))).toBe(true);
     }
@@ -41,6 +42,12 @@ describe("service worker offline shell", () => {
     expect(source).toContain('"/calendar": "/calendar.html"');
     expect(source).toContain("networkFirstNavigation(event.request)");
     expect(source).not.toContain('caches.match("/")');
+  });
+
+  it("falls back shared schedule navigation to its exported shell", () => {
+    const source = serviceWorkerSource();
+
+    expect(source).toContain('"/shared-schedule": "/shared-schedule.html"');
   });
 
   it("never stores authenticated API responses in Cache Storage", () => {

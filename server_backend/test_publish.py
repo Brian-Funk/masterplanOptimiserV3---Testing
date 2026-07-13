@@ -388,6 +388,9 @@ def test_general_schedule_publish_uses_explicit_schedule_views(db):
                     "date": "2026-08-01",
                     "start_time": "09:00",
                     "end_time": "10:00",
+                    "location_name": "Room A",
+                    "location_address": "1 Parliament Square",
+                    "responsible": "Session president",
                     "schedule_view_ids": [10, 11],
                     "schedule_view_names": ["Delegates", "Officials"],
                 },
@@ -412,6 +415,8 @@ def test_general_schedule_publish_uses_explicit_schedule_views(db):
     assert [category.name for category in categories] == ["Delegates", "Officials"]
     assert [item.category_id for item in items] == [10, 11]
     assert [item.category_name for item in items] == ["Delegates", "Officials"]
+    assert all(item.location_address == "1 Parliament Square" for item in items)
+    assert all(item.responsible == "Session president" for item in items)
 
 
 def test_general_schedule_publish_does_not_create_fallback_for_explicit_no_view_items(db):

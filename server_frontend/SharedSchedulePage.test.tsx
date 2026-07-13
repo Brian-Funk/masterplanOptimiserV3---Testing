@@ -29,7 +29,8 @@ const payload = {
       start_time: "09:00",
       end_time: "10:00",
       location_name: "Room A",
-      location_note: "North entrance",
+      location_address: "1 Parliament Square",
+      responsible: "Session president",
       audience_teams: [{ name: "Delegates", short_name: "DEL", colour: "#336699" }],
       description: "Bring laptops.",
       type_name: "Briefing",
@@ -44,7 +45,8 @@ const payload = {
       start_time: "11:00",
       end_time: "12:00",
       location_name: null,
-      location_note: null,
+      location_address: null,
+      responsible: null,
       audience_teams: [],
       description: null,
       type_name: null,
@@ -82,6 +84,14 @@ describe("SharedSchedulePage", () => {
         cache: "no-store",
       }),
     );
+
+    await user.dblClick(
+      screen.getByRole("button", { name: "View details for Opening Briefing" }),
+    );
+    expect(screen.getByText("Room A, 1 Parliament Square")).toBeInTheDocument();
+    expect(screen.getByText("Session president")).toBeInTheDocument();
+    expect(screen.getByText("Bring laptops.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close schedule details" }));
 
     await user.click(screen.getByRole("tab", { name: "Officials" }));
     expect(screen.getAllByText("Board Update").length).toBeGreaterThan(0);

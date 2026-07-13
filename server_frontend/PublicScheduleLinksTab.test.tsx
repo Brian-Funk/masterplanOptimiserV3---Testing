@@ -129,7 +129,7 @@ describe("PublicScheduleLinksTab", () => {
     await waitFor(() =>
       expect(mockApiFetch).toHaveBeenCalledWith(
         "/api/v1/admin/events/7/public-schedule-links/5/invalidate",
-        { method: "POST" },
+        { method: "POST", body: "{}" },
       ),
     );
   });

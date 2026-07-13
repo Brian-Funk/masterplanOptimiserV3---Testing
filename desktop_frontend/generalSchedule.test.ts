@@ -24,7 +24,13 @@ const scheduleViews = [
 ];
 
 const locations = [
-  { id: 7, event_id: 10, name: "Room A", address: "", capacity: null },
+  {
+    id: 7,
+    event_id: 10,
+    name: "Room A",
+    address: "1 Parliament Square",
+    capacity: null,
+  },
 ];
 
 const persons = [
@@ -107,6 +113,7 @@ describe("general schedule templates", () => {
       colour: "#a5b4fc",
       copy_template_html: types[0].copy_template_html,
       location_name: "Room A",
+      location_address: "1 Parliament Square",
     });
     expect(source[0].schedule_views).toEqual([
       expect.objectContaining({ id: 4, name: "Delegates" }),
@@ -114,6 +121,27 @@ describe("general schedule templates", () => {
     expect(source[0].audience_teams).toEqual([
       expect.objectContaining({ id: 1, name: "FEMM" }),
     ]);
+  });
+
+  it("changes the public fingerprint source when a location address changes", () => {
+    const original = buildGeneralSchedulePublicFingerprintSource(
+      [element],
+      teams,
+      locations,
+      persons,
+      types,
+      scheduleViews,
+    );
+    const updated = buildGeneralSchedulePublicFingerprintSource(
+      [element],
+      teams,
+      [{ ...locations[0], address: "2 Parliament Square" }],
+      persons,
+      types,
+      scheduleViews,
+    );
+
+    expect(updated).not.toBe(original);
   });
 
   it("excludes public elements without a selected schedule view from public fingerprints", () => {

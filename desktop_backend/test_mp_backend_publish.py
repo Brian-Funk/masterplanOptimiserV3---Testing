@@ -4,6 +4,7 @@ import hashlib
 import json
 
 import app.api.v1.mp_backend as mp_backend_module
+from app.models.location import Location
 from app.models.task import Task
 from app.models.general_schedule import (
     GeneralSchedulePublishState,
@@ -68,7 +69,8 @@ def test_public_schedule_fingerprint_matches_browser_number_serialisation():
             "date": "2026-08-01",
             "start_time": "10:00",
             "end_time": "11:00",
-            "location_name": "No location",
+            "location_name": "Hall A",
+            "location_address": "1 Main Street",
             "schedule_view_ids": [20],
             "schedule_view_names": ["Board"],
             "schedule_view_sort_orders": {"20": 2.0},
@@ -84,7 +86,8 @@ def test_public_schedule_fingerprint_matches_browser_number_serialisation():
             "date": "2026-08-01",
             "start_time": "09:00",
             "end_time": "10:00",
-            "location_name": "No location",
+            "location_name": None,
+            "location_address": None,
             "schedule_view_ids": [20],
             "schedule_view_names": ["Board"],
             "schedule_view_sort_orders": {"20": 2.0},
@@ -100,7 +103,8 @@ def test_public_schedule_fingerprint_matches_browser_number_serialisation():
             "date": item["date"],
             "start_time": item["start_time"],
             "end_time": item["end_time"],
-            "location_name": "No location",
+            "location_name": item["location_name"],
+            "location_address": item["location_address"],
             "audience_teams": [],
             "schedule_views": [{"id": 20, "name": "Board", "sort_order": 2}],
             "responsible": None,
@@ -245,7 +249,12 @@ def test_public_schedule_selected_day_publish_filters_items_and_clears_failure(
     event.mp_backend_url = "https://mp.example.test"
     event.mp_backend_secret = "secret"
     view = ScheduleView(event_id=event.id, name="Public", sort_order=0)
-    db.add(view)
+    location = Location(
+        event_id=event.id,
+        name="Main Hall",
+        address="1 Parliament Square",
+    )
+    db.add_all([view, location])
     db.flush()
     db.add_all(
         [
@@ -255,6 +264,8 @@ def test_public_schedule_selected_day_publish_filters_items_and_clears_failure(
                 date="2026-08-01",
                 start_time="09:00",
                 end_time="10:00",
+                location_id=location.id,
+                responsible_text="Session president",
                 schedule_view_ids=[view.id],
                 visibility="public",
             ),
@@ -306,6 +317,9 @@ def test_public_schedule_selected_day_publish_filters_items_and_clears_failure(
     assert payload["publish_scope"] == "dates"
     assert payload["dates"] == ["2026-08-01"]
     assert [item["title"] for item in payload["items"]] == ["Day One"]
+    assert payload["items"][0]["location_name"] == "Main Hall"
+    assert payload["items"][0]["location_address"] == "1 Parliament Square"
+    assert payload["items"][0]["responsible"] == "Session president"
     db.refresh(state)
     assert state.day_records["2026-08-01"]["publish_failed_at"] is None
     assert state.day_records["2026-08-01"]["failure_message"] is None

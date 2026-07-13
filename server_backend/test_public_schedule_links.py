@@ -49,7 +49,8 @@ def _seed_schedule(db, event_id: int) -> None:
                 start_time="09:00",
                 end_time="10:00",
                 location_name="Room A",
-                location_note="Use the north entrance",
+                location_address="1 Parliament Square",
+                responsible="Session president",
                 audience_teams_json=json.dumps(
                     [
                         {
@@ -239,9 +240,7 @@ def test_expiry_and_invalidation_are_permanent(db, root_client):
     replacement_url = (
         f"/api/v1/admin/events/{event.id}/public-schedule-links/{replacement_id}"
     )
-    invalidated = root_client.post(
-        f"{replacement_url}/invalidate"
-    )
+    invalidated = root_client.post(f"{replacement_url}/invalidate", json={})
     assert invalidated.status_code == 200
     assert invalidated.json()["status"] == "invalidated"
     assert root_client.patch(
@@ -263,7 +262,8 @@ def test_links_can_be_permanently_deleted_in_any_state(db, root_client):
     base_url = f"/api/v1/admin/events/{event.id}/public-schedule-links"
 
     assert root_client.post(
-        f"{base_url}/{invalidated['id']}/invalidate"
+        f"{base_url}/{invalidated['id']}/invalidate",
+        json={},
     ).status_code == 200
     assert root_client.delete(f"{base_url}/{active['id']}").status_code == 204
     assert root_client.delete(f"{base_url}/{invalidated['id']}").status_code == 204
@@ -301,7 +301,8 @@ def test_shared_response_contains_only_public_programme_fields(db, root_client):
     }
     item = data["items"][0]
     assert item["title"] == "Opening Briefing"
-    assert item["location_note"] == "Use the north entrance"
+    assert item["location_address"] == "1 Parliament Square"
+    assert item["responsible"] == "Session president"
     assert item["audience_teams"] == [
         {"name": "Delegates", "short_name": "DEL", "colour": "#336699"}
     ]
@@ -312,6 +313,7 @@ def test_shared_response_contains_only_public_programme_fields(db, root_client):
         "Internal category",
         "external_session_element_id",
         "copy_template_html",
+        "location_note",
         "token_hash",
         "created_by_id",
     ):
@@ -396,9 +398,7 @@ def test_link_actions_are_audited_without_raw_tokens(db, root_client):
         json={"description": "Updated internal description"},
     )
     link_url = f"/api/v1/admin/events/{event.id}/public-schedule-links/{link_id}"
-    root_client.post(
-        f"{link_url}/invalidate"
-    )
+    root_client.post(f"{link_url}/invalidate", json={})
     root_client.delete(link_url)
 
     rows = (

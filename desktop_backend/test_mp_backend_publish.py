@@ -5,7 +5,11 @@ import json
 
 import app.api.v1.mp_backend as mp_backend_module
 from app.models.location import Location
+from app.models.assignment import Assignment
+from app.models.group import Group
+from app.models.person import Person
 from app.models.task import Task
+from app.models.task_template import TaskTemplate
 from app.models.general_schedule import (
     GeneralSchedulePublishState,
     ScheduleView,
@@ -194,6 +198,113 @@ def test_mp_backend_publish_without_dates_sends_all_tasks(db, client, monkeypatc
         "Session Task",
     ]
     assert "theme" not in payload
+
+
+def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnight_data(
+    db,
+    client,
+    monkeypatch,
+):
+    """Published group allocations are availability-aware and retain the overnight tail."""
+    event = create_test_event(db, name="Overnight Publish")
+    event.mp_backend_url = "https://mp.example.test"
+    event.mp_backend_secret = "secret"
+    event.meta_data = {"schedule_day_range": {"startHour": 6, "endHour": 30}}
+    task_type = create_test_task_type(db)
+    available = Person(
+        event_id=event.id,
+        first_name="Ada",
+        last_name="Available",
+        global_data={},
+    )
+    unavailable = Person(
+        event_id=event.id,
+        first_name="Una",
+        last_name="Unavailable",
+        global_data={
+            "unavailabilities": [
+                {"from": "2026-08-02T00:30:00", "to": "2026-08-02T02:00:00"},
+            ],
+        },
+    )
+    db.add_all([available, unavailable])
+    db.flush()
+    group = Group(
+        event_id=event.id,
+        name="Night Team",
+        meta_data={
+            "members": [
+                {"type": "person", "id": available.id},
+                {"type": "person", "id": unavailable.id},
+            ],
+        },
+    )
+    template = TaskTemplate(
+        machine_name="overnight_group_test",
+        name="Overnight Group Test",
+        task_type_id=task_type.id,
+        fields=[
+            {
+                "id": "crew",
+                "name": "Crew",
+                "type": "persons_list",
+                "category": "conditions",
+            },
+        ],
+    )
+    db.add_all([group, template])
+    db.flush()
+    task = Task(
+        event_id=event.id,
+        task_type_id=task_type.id,
+        task_template_id=template.id,
+        title="Night Duty",
+        constraints={
+            "field_values": {"crew": [{"type": "group", "id": group.id}]},
+        },
+        optimised={},
+        final={
+            "start_time": 25 * 60,
+            "end_time": 26 * 60,
+            "field_assignments": {
+                "crew": [available.id, unavailable.id],
+                "field_Assigned": [available.id, unavailable.id],
+            },
+        },
+        additional={"date": "2026-08-01"},
+        is_floating=False,
+        is_transfer=False,
+    )
+    db.add(task)
+    db.flush()
+    db.add_all(
+        [
+            Assignment(event_id=event.id, task_id=task.id, person_id=available.id),
+            Assignment(event_id=event.id, task_id=task.id, person_id=unavailable.id),
+        ],
+    )
+    db.commit()
+
+    FakeAsyncClient.captured_payloads = []
+    monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.post(f"/api/v1/mp-backend/publish/{event.id}", json={})
+
+    assert response.status_code == 200
+    payload = FakeAsyncClient.captured_payloads[0]
+    assert payload["event"]["schedule_day_range"] == {"start_hour": 6, "end_hour": 30}
+    published_task = payload["tasks"][0]
+    assert published_task["start"] == "2026-08-02T01:00:00"
+    assert published_task["end"] == "2026-08-02T02:00:00"
+    assert published_task["additional"]["working_date"] == "2026-08-01"
+    assert [person["person_id"] for person in published_task["attendees"]] == [available.id]
+    assert [person["person_id"] for person in published_task["field_assignments"]["crew"]] == [available.id]
+    assert any(
+        interval["person_id"] == unavailable.id
+        and interval["working_date"] == "2026-08-01"
+        and interval["start"] == "2026-08-02T00:30:00"
+        for interval in payload["unavailabilities"]
+    )
 
 
 def test_mp_backend_publish_rejects_invalid_date(client, db):

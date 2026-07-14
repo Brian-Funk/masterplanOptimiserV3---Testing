@@ -279,7 +279,10 @@ def test_shared_response_contains_only_public_programme_fields(db, root_client):
     event = db.query(Event).filter(Event.name == "Root Event").one()
     event.start_date = date(2026, 8, 1)
     event.end_date = date(2026, 8, 3)
-    event.metadata_json = json.dumps({"day_aliases": {"2026-08-01": "Day 1"}})
+    event.metadata_json = json.dumps({
+        "day_aliases": {"2026-08-01": "Day 1"},
+        "schedule_day_range": {"start_hour": 6, "end_hour": 30},
+    })
     db.commit()
     _seed_schedule(db, event.id)
     created = _create_link(root_client, event.id, view_ids=[10])
@@ -298,11 +301,13 @@ def test_shared_response_contains_only_public_programme_fields(db, root_client):
         "start_date": "2026-08-01",
         "end_date": "2026-08-03",
         "day_aliases": {"2026-08-01": "Day 1"},
+        "schedule_day_range": {"start_hour": 6, "end_hour": 30},
     }
     item = data["items"][0]
     assert item["title"] == "Opening Briefing"
     assert item["location_address"] == "1 Parliament Square"
     assert item["responsible"] == "Session president"
+    assert item["working_date"] == "2026-08-01"
     assert item["audience_teams"] == [
         {"name": "Delegates", "short_name": "DEL", "colour": "#336699"}
     ]

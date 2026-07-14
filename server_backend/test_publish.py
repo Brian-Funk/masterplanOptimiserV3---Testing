@@ -1,11 +1,12 @@
 """Tests for the desktop-to-server publish endpoint."""
 from fastapi.testclient import TestClient
 
-from server_backend.conftest import _raw_client, create_test_event
+from server_backend.conftest import _raw_client, create_test_event, create_test_user
 from app.models.published import (
     PublishedGeneralScheduleCategory,
     PublishedGeneralScheduleItem,
     PublishedPerson,
+    PublishedPersonUnavailability,
     PublishedTask,
     TaskEdit,
 )
@@ -106,6 +107,55 @@ def test_publish_creates_data(db):
     assert tasks[0].name == "Opening Ceremony"
     assert len(persons) == 1
     assert persons[0].first_name == "John"
+
+
+def test_publish_adds_range_and_unavailability_without_touching_registered_users(db):
+    """Publishing adds schedule data while preserving existing server accounts."""
+    event, secret = create_test_event(db, name="Overnight Evt")
+    existing_user = create_test_user(
+        db,
+        username="existing.viewer",
+        display_name="Existing Viewer",
+        event_id=event.id,
+    )
+    client = _publish_client(secret)
+    payload = {
+        "event": {
+            "name": event.name,
+            "schedule_day_range": {"start_hour": 6, "end_hour": 30},
+        },
+        "tasks": [
+            {
+                "id": 7,
+                "name": "Night Duty",
+                "start": "2026-08-02T01:00:00",
+                "end": "2026-08-02T02:00:00",
+                "attendees": [],
+            },
+        ],
+        "persons": [
+            {"id": 1, "first_name": "Jane", "last_name": "Doe"},
+        ],
+        "unavailabilities": [
+            {
+                "person_id": 1,
+                "working_date": "2026-08-01",
+                "start": "2026-08-02T00:30:00",
+                "end": "2026-08-02T01:30:00",
+            },
+        ],
+    }
+
+    response = client.post("/api/v1/publish/publish", json=payload)
+
+    assert response.status_code == 200
+    db.refresh(existing_user)
+    assert existing_user.username == "existing.viewer"
+    db.refresh(event)
+    assert '"schedule_day_range": {"start_hour": 6, "end_hour": 30}' in event.metadata_json
+    intervals = db.query(PublishedPersonUnavailability).filter_by(event_id=event.id).all()
+    assert len(intervals) == 1
+    assert intervals[0].working_date == "2026-08-01"
 
 
 def test_publish_replaces_existing(db):

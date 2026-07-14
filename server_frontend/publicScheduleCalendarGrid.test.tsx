@@ -118,4 +118,25 @@ describe("PublicScheduleCalendarGrid", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("renders next-day items in the published overnight tail", () => {
+    render(
+      <PublicScheduleCalendarGrid
+        selectedDate="2026-08-01"
+        scheduleDayRange={{ start_hour: 6, end_hour: 30 }}
+        items={[
+          {
+            ...detailedItem,
+            date: "2026-08-02",
+            working_date: "2026-08-01",
+            start_time: "01:00",
+            end_time: "02:00",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("00:00 (+1)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View details for Opening Briefing" })).toBeInTheDocument();
+  });
 });

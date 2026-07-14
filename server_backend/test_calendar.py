@@ -13,6 +13,7 @@ from app.models.published import (
     PublishedGeneralScheduleItem,
     PublishedTask,
     PublishedPerson,
+    PublishedPersonUnavailability,
     TaskEdit,
 )
 
@@ -57,6 +58,54 @@ def test_get_calendar(db):
     data = r.json()
     assert len(data["tasks"]) == 1
     assert data["tasks"][0]["name"] == "Workshop A"
+
+
+def test_calendar_returns_overnight_working_day_and_private_unavailability(db):
+    """Authenticated calendars retain the overnight tail and exact missing-person detail."""
+    event, _ = create_test_event(db, name="Night Calendar")
+    event.metadata_json = json.dumps(
+        {"schedule_day_range": {"start_hour": 6, "end_hour": 30}},
+    )
+    person = PublishedPerson(
+        event_id=event.id,
+        external_person_id=11,
+        first_name="Night",
+        last_name="Worker",
+    )
+    task = PublishedTask(
+        event_id=event.id,
+        external_task_id=11,
+        name="Late Session",
+        start_datetime=datetime(2026, 8, 2, 1, 0),
+        end_datetime=datetime(2026, 8, 2, 2, 0),
+        attendees_json="[]",
+    )
+    interval = PublishedPersonUnavailability(
+        event_id=event.id,
+        external_person_id=11,
+        working_date="2026-08-01",
+        start_datetime="2026-08-02T00:30:00",
+        end_datetime="2026-08-02T01:30:00",
+    )
+    db.add_all([person, task, interval])
+    db.commit()
+    user = create_test_user(db, username="night_user", event_id=event.id)
+    client = _make_client(db, user)
+
+    response = client.get(f"/api/v1/calendar/{event.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schedule_day_range"] == {"start_hour": 6, "end_hour": 30}
+    assert data["tasks"][0]["working_date"] == "2026-08-01"
+    assert data["unavailabilities"] == [
+        {
+            "person_id": 11,
+            "working_date": "2026-08-01",
+            "start": "2026-08-02T00:30:00",
+            "end": "2026-08-02T01:30:00",
+        },
+    ]
 
 
 def test_get_calendar_persons(db):

@@ -82,4 +82,72 @@ describe("transfer request metadata", () => {
       }),
     );
   });
+
+  it("uses capability labels in structured flow feedback", async () => {
+    capabilitiesGetAll.mockResolvedValue([
+      { id: 7, machine_name: "is_ext_orga", name: "Extended Orga" },
+    ]);
+    flowCheck.mockResolvedValue({
+      feasible: false,
+      errors: ["Task 'Support' (ID: 41) needs 1 'is_ext_orga'"],
+      diagnostics: {
+        schema_version: 1,
+        status: "infeasible",
+        checked_scope: "full",
+        summary: "No feasible schedule was found.",
+        issues: [
+          {
+            code: "CAPABILITY_SHORTAGE",
+            category: "capability",
+            severity: "error",
+            message: "Task 'Support' needs 1 is_ext_orga.",
+            task_ids: [41],
+            person_ids: [],
+            transfer_ids: [],
+            location_ids: [],
+            capability_ids: ["is_ext_orga"],
+            facts: [
+              { label: "Required capability", value: "is_ext_orga" },
+            ],
+            suggestions: ["Add an is_ext_orga."],
+          },
+        ],
+      },
+    });
+
+    const result = await performFlowCheck({
+      selectedEvent: { id: 1 },
+      selectedDate: "2026-08-01",
+      templates: [
+        {
+          id: 10,
+          name: "Support",
+          fields: [{ id: 1, name: "Location", type: "location" }],
+        } as any,
+      ],
+      persons: [],
+      locations: [{ id: 1, name: "Venue" }],
+      taskInstances: [
+        {
+          id: 41,
+          event_id: 1,
+          template_id: 10,
+          date: "2026-08-01",
+          name: "Support",
+          field_values: { 1: 1 },
+        },
+      ],
+      silent: true,
+    });
+
+    expect(result.errors[0]).toContain("Extended Orga");
+    expect(result.diagnostics?.issues[0].message).toContain("Extended Orga");
+    expect(result.diagnostics?.issues[0].facts[0].value).toBe("Extended Orga");
+    expect(result.diagnostics?.issues[0].suggestions[0]).toContain(
+      "Extended Orga",
+    );
+    expect(result.diagnostics?.issues[0].capability_ids).toEqual([
+      "is_ext_orga",
+    ]);
+  });
 });

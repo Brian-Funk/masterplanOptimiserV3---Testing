@@ -90,6 +90,45 @@ def test_normalize_person_capabilities():
     assert "is_chairperson" in result.persons[0].capabilities
 
 
+def test_flow_person_name_metadata_survives_legacy_solver_class(monkeypatch):
+    """Hot reloads can attach names to a previously loaded NormPerson class."""
+    import app.core.normalizer as flow_normalizer
+
+    class LegacyNormPerson:
+        def __init__(
+            self,
+            id,
+            home_location_id,
+            capabilities,
+            max_work_minutes_per_day=None,
+            unavailable_intervals=None,
+            initial_fatigue=0.0,
+        ):
+            self.id = id
+            self.home_location_id = home_location_id
+            self.capabilities = capabilities
+            self.max_work_minutes_per_day = max_work_minutes_per_day
+            self.unavailable_intervals = unavailable_intervals or []
+            self.initial_fatigue = initial_fatigue
+
+    monkeypatch.setattr(flow_normalizer, "NormPerson", LegacyNormPerson)
+    result = flow_normalizer.normalize_flow_input(
+        tasks=[],
+        persons=[
+            FlowPerson(
+                id=9,
+                first_name="Alex",
+                last_name="Example",
+                home_location_id=1,
+            )
+        ],
+        locations=[],
+        capabilities=[],
+    )
+
+    assert result.persons[0].name == "Alex Example"
+
+
 def test_normalize_person_unavailability():
     """Person with unavailability intervals in global_data."""
     persons = [

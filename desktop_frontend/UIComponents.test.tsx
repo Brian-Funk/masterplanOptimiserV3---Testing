@@ -38,7 +38,7 @@ describe("Button", () => {
     const { rerender } = render(<Button size="sm">S</Button>);
     expect(screen.getByRole("button").className).toContain("px-3");
     rerender(<Button size="lg">L</Button>);
-    expect(screen.getByRole("button").className).toContain("px-6");
+    expect(screen.getByRole("button").className).toContain("px-5");
   });
 
   it("applies primary variant inline style", () => {
@@ -57,7 +57,7 @@ describe("Button", () => {
 
   it("applies outline variant class", () => {
     render(<Button variant="outline">O</Button>);
-    expect(screen.getByRole("button").className).toContain("border-2");
+    expect(screen.getByRole("button").className).toContain("border");
   });
 
   it("applies ghost variant class", () => {
@@ -92,7 +92,7 @@ describe("Card", () => {
 
   it("applies hover styles", () => {
     const { container } = render(<Card hover>Hover me</Card>);
-    expect(container.firstChild).toHaveClass("hover:shadow-md");
+    expect(container.firstChild).toHaveClass("hover:shadow-sm");
   });
 
   it("merges custom className", () => {

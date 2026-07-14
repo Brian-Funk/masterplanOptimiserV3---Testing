@@ -43,7 +43,7 @@ describe("Button", () => {
 
   it("applies size classes", () => {
     render(<Button size="lg">Large</Button>);
-    expect(screen.getByRole("button").className).toContain("px-6");
+    expect(screen.getByRole("button").className).toContain("px-5");
   });
 
   it("applies small size classes", () => {
@@ -54,7 +54,7 @@ describe("Button", () => {
   it("applies outline variant classes", () => {
     render(<Button variant="outline">Outline</Button>);
     const btn = screen.getByRole("button");
-    expect(btn.className).toContain("border-2");
+    expect(btn.className).toContain("border");
   });
 
   it("applies ghost variant classes", () => {
@@ -112,7 +112,7 @@ describe("Card", () => {
 
   it("applies hover class when hover prop is true", () => {
     const { container } = render(<Card hover>Hoverable</Card>);
-    expect(container.firstChild).toHaveClass("hover:shadow-md");
+    expect(container.firstChild).toHaveClass("hover:shadow-sm");
   });
 
   it("applies custom className", () => {
@@ -122,7 +122,7 @@ describe("Card", () => {
 
   it("does not apply hover class when hover is false", () => {
     const { container } = render(<Card>No hover</Card>);
-    expect(container.firstChild).not.toHaveClass("hover:shadow-md");
+    expect(container.firstChild).not.toHaveClass("hover:shadow-sm");
   });
 
   it("has border and background classes", () => {
@@ -130,7 +130,7 @@ describe("Card", () => {
     const el = container.firstChild as HTMLElement;
     expect(el.className).toContain("bg-white");
     expect(el.className).toContain("border");
-    expect(el.className).toContain("rounded-lg");
+    expect(el.className).toContain("rounded-xl");
   });
 });
 

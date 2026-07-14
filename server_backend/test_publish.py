@@ -603,7 +603,9 @@ def test_general_schedule_date_scope_includes_after_midnight_working_day(db):
             "fingerprint": "overnight",
             "publish_scope": "dates",
             "dates": ["2026-08-01"],
-            "working_day_offset_hour": 6,
+            "event": {
+                "schedule_day_range": {"start_hour": 6, "end_hour": 30},
+            },
             "schedule_views": [{"id": 10, "name": "Public"}],
             "items": [
                 {

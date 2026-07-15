@@ -73,6 +73,17 @@ describe("activation email administration", () => {
     expect(source).toContain("No links were created for the selected users");
   });
 
+  it("downloads canonical QR artwork from the protected backend renderer", () => {
+    const source = adminPageSource();
+
+    expect(source).toContain('"/api/v1/admin/activation-qr-codes"');
+    expect(source).toContain("token: activationTokenFromUrl(link.activation_url)");
+    expect(source).toContain("await response.blob()");
+    expect(source).toContain('a.download = "activation-qr-codes.zip"');
+    expect(source).not.toContain("QRCodeCanvas");
+    expect(source).not.toContain("new JSZip");
+  });
+
   it("shows safe mail readiness and link invalidation controls", () => {
     const source = adminPageSource();
 

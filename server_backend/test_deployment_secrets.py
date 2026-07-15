@@ -58,6 +58,25 @@ def test_smtp_token_is_provisioned_as_an_optional_docker_secret():
     assert "SMTP_TOKEN=" not in example_env
 
 
+def test_activation_email_brand_and_qr_assets_are_packaged_predictably():
+    """Production must use the approved mail identity and deterministic artwork."""
+
+    root = _server_root()
+    example_env = (root / ".env.example").read_text(encoding="utf-8")
+    configure_script = (root / "configure-production.sh").read_text(
+        encoding="utf-8",
+    )
+    dockerfile = (root / "infra" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "SMTP_FROM_NAME=Masterplan Access" in example_env
+    assert 'SMTP_FROM_NAME="Masterplan Access"' in configure_script
+    assert "fonts-dejavu-core" in dockerfile
+    assert (
+        "COPY web/public/logo_normal.png /app/app/assets/logo_normal.png"
+        in dockerfile
+    )
+
+
 def test_secret_material_is_excluded_from_git_and_docker_context():
     """Local credentials and backups must not enter commits or build layers."""
 

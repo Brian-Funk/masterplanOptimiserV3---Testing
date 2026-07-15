@@ -3,6 +3,7 @@ from server_backend.conftest import (
     create_test_event, create_test_user, inject_session, _make_client,
 )
 from app.models.published import PublishedPerson
+from app.models.user import User
 
 
 # ── POST /admin/users (create user) ──
@@ -129,7 +130,7 @@ def test_bulk_create_users_partial_success_and_tags(db, admin_client):
             {
                 "username": "alpha.tester",
                 "display_name": "Alpha Tester",
-                "email": "alpha@example.test",
+                "email": "alpha@example.com",
                 "can_edit": True,
                 "tags": ["speaker"],
             },
@@ -150,6 +151,26 @@ def test_bulk_create_users_partial_success_and_tags(db, admin_client):
     assert data["created"][0]["can_edit"] is True
     assert data["created"][0]["tags"] == ["board", "event", "speaker"]
     assert {error["index"] for error in data["errors"]} == {1, 2}
+
+
+def test_bulk_create_users_rejects_invalid_email(db, admin_client):
+    """Malformed bulk email input is rejected before any row is created."""
+
+    event, _ = create_test_event(db, name="BulkInvalidEmailEvt")
+
+    response = admin_client.post("/api/v1/admin/users/bulk", json={
+        "event_id": event.id,
+        "users": [
+            {
+                "username": "invalid.email",
+                "display_name": "Invalid Email",
+                "email": "not-an-email",
+            },
+        ],
+    })
+
+    assert response.status_code == 422
+    assert db.query(User).filter_by(username="invalid.email").first() is None
 
 
 def test_bulk_create_users_issuer_forces_own_event(db):

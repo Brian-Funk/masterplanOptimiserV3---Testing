@@ -63,13 +63,13 @@ def test_activation_email_brand_and_qr_assets_are_packaged_predictably():
 
     root = _server_root()
     example_env = (root / ".env.example").read_text(encoding="utf-8")
-    configure_script = (root / "configure-production.sh").read_text(
+    management_actions = (root / "deploy" / "management" / "actions.sh").read_text(
         encoding="utf-8",
     )
     dockerfile = (root / "infra" / "Dockerfile").read_text(encoding="utf-8")
 
     assert "SMTP_FROM_NAME=Masterplan Access" in example_env
-    assert 'SMTP_FROM_NAME="Masterplan Access"' in configure_script
+    assert 'smtp_from_name="Masterplan Access"' in management_actions
     assert "fonts-dejavu-core" in dockerfile
     assert (
         "COPY web/public/logo_normal.png /app/app/assets/logo_normal.png"

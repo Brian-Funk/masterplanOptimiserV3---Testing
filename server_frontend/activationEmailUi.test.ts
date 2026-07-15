@@ -57,7 +57,7 @@ describe("activation email administration", () => {
 
     expect(source).toContain("/activation-email`");
     expect(source).toContain('"/api/v1/admin/batch-activation-emails"');
-    expect(source).toContain("Send email and QR");
+    expect(source).toContain("Email link and QR");
     expect(source).toContain("Retry unsuccessful");
     expect(source).toContain("Batch actions are always explicit");
     expect(source).toContain("Accepted by mail server");

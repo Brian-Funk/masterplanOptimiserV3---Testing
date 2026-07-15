@@ -83,6 +83,43 @@ describe("transfer request metadata", () => {
     );
   });
 
+  it("sends the task-type working-time policy and defaults missing policies to counted", async () => {
+    capabilitiesGetAll.mockResolvedValue([]);
+    flowCheck.mockResolvedValue({ feasible: true, errors: [] });
+
+    await performFlowCheck({
+      selectedEvent: { id: 1 },
+      selectedDate: "2026-08-01",
+      templates: [{ id: 10, name: "Task", fields: [] } as any],
+      persons: [],
+      locations: [],
+      taskTypes: [
+        { id: 100, counts_towards_work_time: false },
+      ],
+      taskInstances: [
+        {
+          id: 41,
+          event_id: 1,
+          template_id: 10,
+          task_type_id: 100,
+          date: "2026-08-01",
+        },
+        {
+          id: 42,
+          event_id: 1,
+          template_id: 10,
+          task_type_id: 200,
+          date: "2026-08-01",
+        },
+      ],
+      silent: true,
+    });
+
+    const tasks = flowCheck.mock.calls[0][0].tasks;
+    expect(tasks[0].counts_towards_work_time).toBe(false);
+    expect(tasks[1].counts_towards_work_time).toBe(true);
+  });
+
   it("uses capability labels in structured flow feedback", async () => {
     capabilitiesGetAll.mockResolvedValue([
       { id: 7, machine_name: "is_ext_orga", name: "Extended Orga" },

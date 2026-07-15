@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 import MetricResourceSelector from "@/components/metrics/MetricResourceSelector";
 import {
   buildMetricScheduleData,
+  calculatePersonHoursByDay,
   dedupeMetricIds,
   findMaxHoursViolations,
   findMaxHoursViolationBreakdowns,
@@ -642,6 +643,84 @@ describe("workload spider metric", () => {
 });
 
 describe("task type spider metrics", () => {
+  it("excludes non-work task types from work metrics but retains task-type duration", async () => {
+    const schedule = buildMetricScheduleData(
+      [
+        {
+          id: 801,
+          name: "Sleep shift",
+          event_id: 1,
+          template_id: 500,
+          task_type_id: 300,
+          date: "2026-08-10",
+          final: {
+            start_time: "00:00",
+            end_time: "05:00",
+            assigned_persons: [1],
+          },
+        },
+        {
+          id: 802,
+          name: "Morning work",
+          event_id: 1,
+          template_id: 500,
+          task_type_id: 100,
+          date: "2026-08-10",
+          final: {
+            start_time: "08:00",
+            end_time: "09:00",
+            assigned_persons: [1],
+          },
+        },
+      ] as any,
+      people,
+      capabilities,
+      {},
+      [
+        {
+          id: 100,
+          name: "Shift",
+          fatigue_score: 1,
+          counts_towards_work_time: true,
+        },
+        {
+          id: 300,
+          name: "Sleep",
+          fatigue_score: 0,
+          counts_towards_work_time: false,
+        },
+      ] as any,
+      undefined,
+      templates,
+    ).data;
+
+    expect(
+      calculatePersonHoursByDay(schedule).get("2026-08-10")?.get(1),
+    ).toBe(1);
+
+    const absolute = await new AbsoluteWorkingHoursMetric().calculate(schedule);
+    expect(absolute.value).toBe(1);
+
+    const streak = await new MaxWorkStreakMetric().calculate(
+      schedule,
+      undefined,
+      {
+        personIds: [1],
+        capabilityIds: [],
+        colorMap: {},
+      },
+    );
+    expect((streak.data as any).lines[0].points[0].y).toBe(1);
+
+    const taskTypeHours = await new TaskTypeHoursSpiderMetric().calculate(
+      schedule,
+      undefined,
+      { personIds: [1], capabilityIds: [], colorMap: {} },
+    );
+    expect((taskTypeHours.data as any).axes).toEqual(["Shift", "Sleep"]);
+    expect((taskTypeHours.data as any).datasets[0].values).toEqual([1, 5]);
+  });
+
   it("calculates task-type counts per person, capability average, and overall average", async () => {
     const schedule = buildTaskTypeSchedule();
 

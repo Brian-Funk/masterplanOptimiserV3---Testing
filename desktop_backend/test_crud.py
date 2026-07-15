@@ -22,6 +22,23 @@ def test_auth_exempt_health(db, unauth_client):
     assert r.status_code == 200
 
 
+def test_task_type_work_time_policy_defaults_and_updates(db, client):
+    """Task types default to counted work and can be configured as non-work."""
+    created = client.post(
+        "/api/v1/task-types/",
+        json={"name": "Sleep shift", "fatigue_score": 0},
+    )
+    assert created.status_code == 201
+    assert created.json()["counts_towards_work_time"] is True
+
+    updated = client.put(
+        f"/api/v1/task-types/{created.json()['id']}",
+        json={"counts_towards_work_time": False},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["counts_towards_work_time"] is False
+
+
 # ═══════════════════════════════════════════════════════════
 # EVENTS
 # ═══════════════════════════════════════════════════════════

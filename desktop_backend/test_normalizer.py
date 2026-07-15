@@ -72,6 +72,77 @@ def test_normalize_basic():
     assert result.persons[0].id == 1
 
 
+def test_work_time_policy_survives_flow_and_optimisation_normalisation():
+    """Static, floating, and transfer tasks preserve the task-type work policy."""
+    common = {
+        "task_type_id": 1,
+        "counts_towards_work_time": False,
+    }
+    optimisation_tasks = [
+        OptimizationTask(
+            id=1,
+            name="Rest",
+            field_values={"field_time": {"start": "08:00", "end": "09:00"}},
+            **common,
+        ),
+        OptimizationTask(
+            id=2,
+            name="Sleep window",
+            is_floating=True,
+            field_values={
+                "field_time_range": {"start": "09:00", "end": "11:00"},
+                "field_duration": 60,
+            },
+            **common,
+        ),
+        OptimizationTask(
+            id=3,
+            name="Passenger rest",
+            is_transfer=True,
+            field_values={
+                "field_start_location": 1,
+                "field_end_location": 2,
+                "field_time": {"start": "11:00", "end": "12:00"},
+            },
+            **common,
+        ),
+        OptimizationTask(
+            id=4,
+            name="Legacy work",
+            field_values={"field_time": {"start": "12:00", "end": "13:00"}},
+            task_type_id=1,
+        ),
+    ]
+    flow_tasks = [FlowTask(**task.model_dump()) for task in optimisation_tasks]
+
+    optimisation = normalize_optimization_input(
+        optimisation_tasks,
+        persons=[],
+        locations=[],
+        capabilities=[],
+        task_type_fatigue_map={1: 0.0},
+    )
+    flow = normalize_flow_input(
+        flow_tasks,
+        persons=[],
+        locations=[],
+        capabilities=[],
+    )
+
+    assert [task.counts_towards_work_time for task in optimisation.tasks] == [
+        False,
+        True,
+    ]
+    assert (
+        optimisation.floating_tasks[0].candidates[0].counts_towards_work_time
+        is False
+    )
+    assert optimisation.transfers[0].counts_towards_work_time is False
+    assert [task.counts_towards_work_time for task in flow.tasks] == [False, True]
+    assert flow.floating_tasks[0].counts_towards_work_time is False
+    assert flow.transfers[0].counts_towards_work_time is False
+
+
 def test_normalize_person_capabilities():
     """Person capabilities are mapped to machine names."""
     persons = [

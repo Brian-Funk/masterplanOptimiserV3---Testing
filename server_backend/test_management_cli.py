@@ -139,6 +139,89 @@ def test_tui_menu_uses_controlling_terminal_when_result_is_captured(tmp_path: Pa
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_interface_geometry_profiles_are_terminal_aware(tmp_path: Path):
+    """Large and maximum layouts must use the available terminal dimensions."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        mp_terminal_dimensions() { printf '60 200\n'; }
+
+        MP_UI_SIZE=compact
+        test "$(mp_ui_geometry menu)" = '24 86 16'
+        test "$(mp_ui_geometry view)" = '28 110 20'
+
+        MP_UI_SIZE=standard
+        test "$(mp_ui_geometry menu)" = '42 156 34'
+
+        MP_UI_SIZE=large
+        test "$(mp_ui_geometry menu)" = '51 180 43'
+        test "$(mp_ui_geometry prompt)" = '22 180 14'
+
+        MP_UI_SIZE=maximum
+        test "$(mp_ui_geometry view)" = '58 196 50'
+
+        mp_terminal_dimensions() { printf '10 30\n'; }
+        test "$(mp_ui_geometry menu)" = '8 26 1'
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_interface_size_setting_is_protected_and_applies_immediately(tmp_path: Path):
+    """The selected layout must persist privately without changing deployment config."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        mp_initialise_paths
+        ui_menu() { printf 'maximum\n'; }
+        ui_message() { :; }
+        mp_configure_interface_size
+        test "$(mp_ui_size_profile)" = maximum
+        test "$(cat "$MP_UI_SIZE_FILE")" = maximum
+        test "$(stat -c '%a' "$MP_UI_SIZE_FILE")" = 600
+        grep -Fq '|interface.size|success|maximum|' "$MP_AUDIT_FILE"
+        test ! -e "$MP_ROOT/.env"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_static_logs_are_sanitised_viewed_and_removed(tmp_path: Path):
     """Bounded logs remain visible in the viewer without retaining temporary files."""
 
@@ -214,8 +297,8 @@ def test_failed_and_empty_logs_show_useful_viewer_content(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
-def test_live_log_viewer_stops_producer_and_cleans_file(tmp_path: Path):
-    """Closing live logs must stop background work and return without residue."""
+def test_live_log_viewer_streams_stops_producer_and_cleans_file(tmp_path: Path):
+    """Live lines must appear before exit and closing must leave no residue."""
 
     environment = os.environ.copy()
     environment.update(
@@ -232,8 +315,19 @@ def test_live_log_viewer_stops_producer_and_cleans_file(tmp_path: Path):
         source deploy/management/actions.sh
         mp_initialise_paths
         mp_follow_logs() { while true; do printf 'tick\n'; sleep 0.05; done; }
-        ui_live_text_file() { sleep 0.15; return 130; }
+        ui_live_text_file() {
+            local attempt
+            for attempt in $(seq 1 20); do
+                if grep -Fxq 'tick' "$2"; then
+                    touch "$MP_STATE/live-line-visible"
+                    return 130
+                fi
+                sleep 0.025
+            done
+            return 9
+        }
         mp_show_live_logs backend
+        test -e "$MP_STATE/live-line-visible"
         test -z "$(find "$MP_STATE" -maxdepth 1 -name 'logs.live.*' -print -quit)"
         touch "$MP_STATE/menu-continued"
         test -e "$MP_STATE/menu-continued"
@@ -249,6 +343,89 @@ def test_live_log_viewer_stops_producer_and_cleans_file(tmp_path: Path):
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_live_log_viewer_reports_source_failure(tmp_path: Path):
+    """A failed live source must explain its termination inside the viewer."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        source deploy/management/actions.sh
+        mp_initialise_paths
+        mp_follow_logs() { printf 'Cannot connect to log source\n' >&2; return 7; }
+        ui_live_text_file() {
+            local attempt
+            for attempt in $(seq 1 20); do
+                if grep -Fq 'source stopped unexpectedly (exit status 7)' "$2"; then
+                    cp "$2" "$MP_STATE/viewed-live-failure"
+                    return 0
+                fi
+                sleep 0.025
+            done
+            return 9
+        }
+        mp_show_live_logs backend
+        grep -Fxq 'Cannot connect to log source' "$MP_STATE/viewed-live-failure"
+        grep -Fq 'source stopped unexpectedly (exit status 7)' "$MP_STATE/viewed-live-failure"
+        test -z "$(find "$MP_STATE" -maxdepth 1 -name 'logs.live.*' -print -quit)"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_live_log_sources_use_the_expected_commands(tmp_path: Path):
+    """Every live-log source must select the intended service command."""
+
+    environment = os.environ.copy()
+    environment.update({"MP_ROOT": str(tmp_path), "MP_TUI": "ansi"})
+    command = r"""
+        source deploy/management/common.sh
+        source deploy/management/actions.sh
+        calls="$1"
+        mp_compose_init() { MP_COMPOSE=(fake_compose); }
+        fake_compose() { printf 'compose %s\n' "$*" >> "$calls"; }
+        sudo() { printf 'sudo %s\n' "$*" >> "$calls"; }
+        mp_follow_logs backend
+        mp_follow_logs db
+        mp_follow_logs all
+        mp_follow_logs caddy
+    """
+    calls = tmp_path / "live-log-calls"
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command, "bash", str(calls)],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "compose logs -f --tail 100 backend",
+        "compose logs -f --tail 100 db",
+        "compose logs -f --tail 100",
+        "sudo journalctl -u caddy -f -n 100",
+    ]
 
 
 def test_management_dashboard_refuses_non_interactive_execution():

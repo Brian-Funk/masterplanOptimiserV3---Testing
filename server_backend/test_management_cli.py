@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import shlex
 import subprocess
 
 
@@ -63,6 +64,8 @@ def test_management_entry_point_is_branded_menu_only():
     assert "Maintenance and diagnostics" in entry
     assert "${1:-}" not in entry
     assert 'readlink -f "${BASH_SOURCE[0]}"' in entry
+    assert 'MP_MENU_CANCEL_LABEL="Exit"' in entry
+    assert 'ui_confirm "Exit MP-OPT_SERVER"' in entry
 
 
 def test_management_launcher_resolves_repository_through_symlink(tmp_path: Path):
@@ -94,11 +97,206 @@ def test_setup_installs_graphical_encrypted_recovery_and_launcher():
     setup = _read("deploy/setup-server.sh")
     deploy = _read("deploy/deploy.sh")
 
-    for package in ("age", "jq", "whiptail"):
+    for package in ("age", "jq", "dialog", "whiptail"):
         assert package in setup
     assert "/usr/local/bin/mp-opt" in setup
     assert "/usr/local/bin/mp-opt" in deploy
     assert '"$REPO_DIR/manage.sh"' in deploy
+
+
+def test_tui_menu_uses_controlling_terminal_when_result_is_captured(tmp_path: Path):
+    """Captured menu output must not make the full-screen backend disappear."""
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_dialog = fake_bin / "dialog"
+    fake_dialog.write_text("#!/bin/sh\nprintf 'snapshots\\n'\n", encoding="utf-8")
+    fake_dialog.chmod(0o755)
+    command = r"""
+        source deploy/management/common.sh
+        selected="$(ui_menu 'MP-OPT_SERVER' 'Choose an area' snapshots 'Snapshots')"
+        test "$selected" = snapshots
+        test "$(mp_tui_backend)" = dialog
+    """
+    runner = tmp_path / "run-menu-test.sh"
+    runner.write_text(command, encoding="utf-8")
+    environment = os.environ.copy()
+    environment.update({"PATH": f"{fake_bin}:{environment['PATH']}", "MP_TUI": "auto"})
+    result = subprocess.run(
+        [
+            "script",
+            "-qec",
+            f"bash -Eeuo pipefail {shlex.quote(str(runner))}",
+            "/dev/null",
+        ],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_static_logs_are_sanitised_viewed_and_removed(tmp_path: Path):
+    """Bounded logs remain visible in the viewer without retaining temporary files."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        source deploy/management/actions.sh
+        mp_initialise_paths
+        mp_collect_logs() { printf '\033[31mVisible log\033[0m\n'; }
+        ui_text_file() {
+            stat -c '%a' "$2" > "$MP_STATE/view-mode"
+            cp "$2" "$MP_STATE/viewed"
+        }
+        mp_show_static_logs backend recent 200
+        grep -Fxq 'Visible log' "$MP_STATE/viewed"
+        ! grep -q $'\033' "$MP_STATE/viewed"
+        grep -Fxq '600' "$MP_STATE/view-mode"
+        test -z "$(find "$MP_STATE" -maxdepth 1 -name 'logs.*' -print -quit)"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_failed_and_empty_logs_show_useful_viewer_content(tmp_path: Path):
+    """Log command failures and empty selections must never vanish silently."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        source deploy/management/actions.sh
+        mp_initialise_paths
+        ui_text_file() { printf '%s\n' "$1" > "$MP_STATE/title"; cp "$2" "$MP_STATE/viewed"; }
+        mp_collect_logs() { return 7; }
+        ! mp_show_static_logs caddy since 30m
+        grep -Fq 'Logs failed' "$MP_STATE/title"
+        grep -Fxq 'No log entries matched this selection.' "$MP_STATE/viewed"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_live_log_viewer_stops_producer_and_cleans_file(tmp_path: Path):
+    """Closing live logs must stop background work and return without residue."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        source deploy/management/actions.sh
+        mp_initialise_paths
+        mp_follow_logs() { while true; do printf 'tick\n'; sleep 0.05; done; }
+        ui_live_text_file() { sleep 0.15; return 130; }
+        mp_show_live_logs backend
+        test -z "$(find "$MP_STATE" -maxdepth 1 -name 'logs.live.*' -print -quit)"
+        touch "$MP_STATE/menu-continued"
+        test -e "$MP_STATE/menu-continued"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_management_dashboard_refuses_non_interactive_execution():
+    """The menu must fail clearly instead of attempting mutations without a TTY."""
+
+    result = subprocess.run(
+        ["bash", "manage.sh"],
+        cwd=_server_root(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "requires an interactive terminal" in result.stderr
+
+
+def test_command_output_window_cleans_success_and_failure_files(tmp_path: Path):
+    """Long-running command reports must be sanitised and removed after viewing."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        mp_initialise_paths
+        ui_text_file() { test -f "$2"; }
+        ui_run_command Test Running bash -c "printf '\033[31mcomplete\033[0m\n'"
+        ! ui_run_command Test Running bash -c "printf 'failed\n'; exit 7"
+        test -z "$(find "$MP_STATE" -maxdepth 1 -name 'command-output.*' -print -quit)"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_production_configurator_delegates_to_guarded_wizard():

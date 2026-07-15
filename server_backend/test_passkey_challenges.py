@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from webauthn.helpers import bytes_to_base64url
 
 from app.api.v1 import passkey as passkey_api
-from app.core.activation import create_activation_link
+from app.core.activation import ADDITIONAL_PASSKEY, create_activation_link
 from app.core.passkey_ceremonies import (
     ACCOUNT_REGISTRATION,
     AUTHENTICATION,
@@ -104,6 +104,67 @@ def _add_credential(db, user, credential_name: str) -> WebAuthnCredential:
 
 def _ceremony(db, ceremony_id: str) -> PasskeyCeremony:
     return db.query(PasskeyCeremony).filter(PasskeyCeremony.id == ceremony_id).one()
+
+
+def test_verified_reset_replaces_all_previous_passkeys(db):
+    """A successful reset leaves only the newly verified credential usable."""
+
+    user = create_test_user(db, username="replace.passkeys", is_activated=True)
+    _add_credential(db, user, "old-credential-one")
+    _add_credential(db, user, "old-credential-two")
+    replacement = WebAuthnCredential(
+        user_id=user.id,
+        credential_id=_credential_id("replacement-credential"),
+        public_key=b"replacement-public-key",
+        sign_count=0,
+    )
+    db.add(replacement)
+    db.flush()
+
+    replaced = passkey_api._replace_previous_credentials(
+        user_id=user.id,
+        new_credential=replacement,
+        db=db,
+    )
+    db.commit()
+
+    credentials = db.query(WebAuthnCredential).filter_by(user_id=user.id).all()
+    assert replaced == 2
+    assert [credential.id for credential in credentials] == [replacement.id]
+    assert credentials[0].friendly_name == "Replacement passkey"
+
+
+def test_additional_passkey_policy_preserves_credentials_and_sessions(db):
+    """Additive invitations retain every old passkey and signed-in session."""
+
+    user = create_test_user(db, username="add.passkey", is_activated=True)
+    old_credential = _add_credential(db, user, "old-additive-credential")
+    added = WebAuthnCredential(
+        user_id=user.id,
+        credential_id=_credential_id("new-additive-credential"),
+        public_key=b"new-public-key",
+        sign_count=0,
+    )
+    db.add(added)
+    db.flush()
+
+    replaced = passkey_api._apply_activation_credential_policy(
+        user_id=user.id,
+        new_credential=added,
+        activation_purpose=ADDITIONAL_PASSKEY,
+        db=db,
+    )
+    db.commit()
+
+    credential_ids = {
+        credential.id
+        for credential in db.query(WebAuthnCredential).filter_by(user_id=user.id)
+    }
+    assert replaced == 0
+    assert credential_ids == {old_credential.id, added.id}
+    assert added.friendly_name == "Additional passkey"
+    assert passkey_api._registration_preserves_sessions(ADDITIONAL_PASSKEY) is True
+    assert passkey_api._registration_preserves_sessions("credential_reset") is False
 
 
 def test_concurrent_login_ceremonies_verify_independently(db, monkeypatch):

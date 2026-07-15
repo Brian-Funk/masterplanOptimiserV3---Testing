@@ -62,6 +62,30 @@ def test_management_entry_point_is_branded_menu_only():
     assert "Logs" in entry
     assert "Maintenance and diagnostics" in entry
     assert "${1:-}" not in entry
+    assert 'readlink -f "${BASH_SOURCE[0]}"' in entry
+
+
+def test_management_launcher_resolves_repository_through_symlink(tmp_path: Path):
+    """The installed /usr/local/bin-style symlink must resolve back to the repository."""
+
+    root = _server_root()
+    launcher = tmp_path / "bin" / "mp-opt"
+    launcher.parent.mkdir()
+    launcher.symlink_to(root / "manage.sh")
+    command = r"""
+        script_path="$(readlink -f "$1")"
+        root_dir="$(cd "$(dirname "$script_path")" && pwd)"
+        test "$root_dir" = "$2"
+        test -f "$root_dir/deploy/management/common.sh"
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command, "bash", str(launcher), str(root)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_setup_installs_graphical_encrypted_recovery_and_launcher():

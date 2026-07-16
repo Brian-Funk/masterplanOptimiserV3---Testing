@@ -89,31 +89,42 @@ def test_secret_material_is_excluded_from_git_and_docker_context():
         assert ignored in dockerignore
 
 
-def test_activation_email_migration_runs_before_backend_rebuild():
-    """Deployment must add required columns before starting the new backend."""
+def test_blank_database_base_schema_runs_before_dynamic_migrations():
+    """Deployment must initialise a blank schema before ordered migrations."""
 
     root = _server_root()
     deploy_script = (root / "deploy" / "deploy.sh").read_text(encoding="utf-8")
+    common = (root / "deploy" / "management" / "common.sh").read_text(
+        encoding="utf-8",
+    )
+    backend_build = '"${MP_COMPOSE[@]}" build backend'
+    base_schema = "mp_ensure_base_schema"
+    migrations = "mp_apply_migrations"
+    application_start = (
+        '"${MP_COMPOSE[@]}" up -d --build --force-recreate --remove-orphans'
+    )
+
+    assert deploy_script.index(backend_build) < deploy_script.index(base_schema)
+    assert deploy_script.index(base_schema) < deploy_script.index(migrations)
+    assert deploy_script.index(migrations) < deploy_script.index(application_start)
+    assert "deploy/migrations/*.sql" in common
+    assert "basename \"$migration\"" in common
+    assert "20260714_activation_email_delivery.sql" not in deploy_script
+    assert "20260715_additional_passkey.sql" not in deploy_script
+    windows_launcher = (root / "deploy" / "update-server.bat").read_text(
+        encoding="utf-8",
+    )
+    assert "bash deploy/deploy.sh" in windows_launcher
+    assert "deploy/migrations/202607" not in windows_launcher
+
     migration = "20260714_activation_email_delivery.sql"
-    purpose_migration = "20260715_additional_passkey.sql"
-    application_start = "$COMPOSE up -d --build --force-recreate --remove-orphans"
-
-    assert migration in deploy_script
-    assert "$COMPOSE stop backend" in deploy_script
-    assert deploy_script.index("$COMPOSE stop backend") < deploy_script.index(migration)
-    assert deploy_script.index(migration) < deploy_script.index(application_start)
-    assert purpose_migration in deploy_script
-    assert deploy_script.index(migration) < deploy_script.index(purpose_migration)
-    assert deploy_script.index(purpose_migration) < deploy_script.index(application_start)
-    assert "pg_isready" in deploy_script
-
     migration_sql = (root / "deploy" / "migrations" / migration).read_text(
         encoding="utf-8",
     )
     assert "ADD COLUMN IF NOT EXISTS delivery_pending" in migration_sql
     assert "SET value = '24'" in migration_sql
 
-    purpose_sql = (root / "deploy" / "migrations" / purpose_migration).read_text(
+    purpose_sql = (root / "deploy" / "migrations" / "20260715_additional_passkey.sql").read_text(
         encoding="utf-8",
     )
     assert "ADD COLUMN IF NOT EXISTS purpose" in purpose_sql

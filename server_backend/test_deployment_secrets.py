@@ -198,13 +198,13 @@ def test_frontend_build_generates_and_reloads_build_specific_csp():
 
     for caddy_name in ("Caddyfile", "Caddyfile.local"):
         caddy = (root / "infra" / caddy_name).read_text(encoding="utf-8")
-        assert "import /etc/caddy/frontend-csp.caddy" in caddy
+        assert "import /etc/caddy/runtime/frontend-csp.caddy" in caddy
         script_lines = [line for line in caddy.splitlines() if "script-src" in line]
         assert not script_lines
 
     compose = (root / "infra" / "docker-compose.yml").read_text(encoding="utf-8")
     assert (
-        "../runtime/frontend-csp.caddy:/etc/caddy/frontend-csp.caddy:ro"
+        "../runtime:/etc/caddy/runtime:ro"
         in compose
     )
     assert "runtime/" in (root / ".gitignore").read_text(encoding="utf-8")

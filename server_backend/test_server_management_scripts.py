@@ -212,3 +212,33 @@ mp_caddy_mode() {{ printf 'unavailable\n'; }}
     assert "compose:logs --tail 25 caddy" in commands
     assert "sudo:caddy validate --config" in commands
     assert "sudo:journalctl -u caddy --since -30m --no-pager" in commands
+
+
+def test_frontend_csp_runtime_repairs_only_empty_legacy_mount(tmp_path: Path):
+    """Policy preparation must repair Docker's empty directory without data loss."""
+    root = _server_root()
+    common = root / "deploy" / "management" / "common.sh"
+    runtime = tmp_path / "runtime"
+    mistaken_mount = runtime / "frontend-csp.caddy"
+    mistaken_mount.mkdir(parents=True)
+
+    repaired = _run_bash(
+        f'source "{common}"; mp_prepare_frontend_csp_runtime',
+        {"MP_ROOT": str(tmp_path)},
+    )
+
+    assert repaired.returncode == 0, repaired.stderr
+    assert runtime.is_dir()
+    assert not mistaken_mount.exists()
+
+    mistaken_mount.mkdir()
+    marker = mistaken_mount / "preserve.txt"
+    marker.write_text("operator data", encoding="utf-8")
+    refused = _run_bash(
+        f'source "{common}"; mp_prepare_frontend_csp_runtime',
+        {"MP_ROOT": str(tmp_path)},
+    )
+
+    assert refused.returncode != 0
+    assert marker.read_text(encoding="utf-8") == "operator data"
+    assert "Refusing to replace non-empty CSP path" in refused.stderr

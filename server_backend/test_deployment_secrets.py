@@ -1,5 +1,9 @@
-"""Production deployment secret provisioning tests."""
+"""Production deployment and secret provisioning tests."""
+import base64
+import hashlib
 from pathlib import Path
+import subprocess
+import sys
 
 
 def _server_root() -> Path:
@@ -130,3 +134,77 @@ def test_blank_database_base_schema_runs_before_dynamic_migrations():
     assert "ADD COLUMN IF NOT EXISTS purpose" in purpose_sql
     assert "additional_passkey" in purpose_sql
     assert "ALTER COLUMN purpose SET NOT NULL" in purpose_sql
+
+
+def test_frontend_csp_allows_only_hashed_exported_inline_scripts(tmp_path: Path):
+    """The static Next.js runtime must hydrate without enabling arbitrary scripts."""
+    root = _server_root()
+    frontend = tmp_path / "out"
+    nested = frontend / "bootstrap"
+    nested.mkdir(parents=True)
+    scripts = ["self.__next_f=[]", "self.__next_f.push([0])"]
+    (frontend / "index.html").write_text(
+        f'<script>{scripts[0]}</script><script src="/external.js"></script>',
+        encoding="utf-8",
+    )
+    (nested / "index.html").write_text(
+        f"<script>{scripts[1]}</script><script>{scripts[0]}</script>",
+        encoding="utf-8",
+    )
+    output = frontend / ".csp-header.caddy"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(root / "deploy" / "generate_frontend_csp.py"),
+            str(frontend),
+            "--output",
+            str(output),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    header = output.read_text(encoding="utf-8")
+    expected = {
+        base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+        for script in scripts
+    }
+    assert all(f"'sha256-{digest}'" in header for digest in expected)
+    assert header.count("'sha256-") == len(expected)
+    script_policy = header.split("script-src ", 1)[1].split(";", 1)[0]
+    assert "'self'" in script_policy
+    assert "'unsafe-inline'" not in script_policy
+
+
+def test_frontend_build_generates_and_reloads_build_specific_csp():
+    """Full deploys and menu rebuilds must activate the new hashed policy."""
+    root = _server_root()
+    deploy_script = (root / "deploy" / "deploy.sh").read_text(encoding="utf-8")
+    actions = (root / "deploy" / "management" / "actions.sh").read_text(
+        encoding="utf-8",
+    )
+
+    generator = "deploy/generate_frontend_csp.py"
+    assert generator in deploy_script
+    assert generator in actions
+    assert deploy_script.index("npm run build") < deploy_script.index(generator)
+    rebuild = actions[actions.index("mp_rebuild_frontend()") :]
+    rebuild = rebuild[: rebuild.index("# Print one bounded service log selection")]
+    assert rebuild.index("npm run build") < rebuild.index(generator)
+    assert rebuild.index(generator) < rebuild.index("mp_caddy_reload")
+
+    for caddy_name in ("Caddyfile", "Caddyfile.local"):
+        caddy = (root / "infra" / caddy_name).read_text(encoding="utf-8")
+        assert "import /etc/caddy/frontend-csp.caddy" in caddy
+        script_lines = [line for line in caddy.splitlines() if "script-src" in line]
+        assert not script_lines
+
+    compose = (root / "infra" / "docker-compose.yml").read_text(encoding="utf-8")
+    assert (
+        "../runtime/frontend-csp.caddy:/etc/caddy/frontend-csp.caddy:ro"
+        in compose
+    )
+    assert "runtime/" in (root / ".gitignore").read_text(encoding="utf-8")

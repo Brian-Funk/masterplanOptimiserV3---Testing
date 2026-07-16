@@ -62,6 +62,7 @@ def test_management_entry_point_is_branded_menu_only():
     assert "Database" in entry
     assert "Logs" in entry
     assert "Maintenance and diagnostics" in entry
+    assert "High availability" in entry
     assert "${1:-}" not in entry
     assert 'readlink -f "${BASH_SOURCE[0]}"' in entry
     assert 'MP_MENU_CANCEL_LABEL="Exit"' in entry

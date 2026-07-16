@@ -392,8 +392,8 @@ def test_live_log_viewer_reports_source_failure(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
-def test_live_log_sources_use_the_expected_commands(tmp_path: Path):
-    """Every live-log source must select the intended service command."""
+def test_live_log_sources_use_the_expected_topology_commands(tmp_path: Path):
+    """Every live-log source must select its Compose or host service command."""
 
     environment = os.environ.copy()
     environment.update({"MP_ROOT": str(tmp_path), "MP_TUI": "ansi"})
@@ -407,6 +407,9 @@ def test_live_log_sources_use_the_expected_commands(tmp_path: Path):
         mp_follow_logs backend
         mp_follow_logs db
         mp_follow_logs all
+        mp_caddy_mode() { printf 'container\n'; }
+        mp_follow_logs caddy
+        mp_caddy_mode() { printf 'host\n'; }
         mp_follow_logs caddy
     """
     calls = tmp_path / "live-log-calls"
@@ -424,6 +427,7 @@ def test_live_log_sources_use_the_expected_commands(tmp_path: Path):
         "compose logs -f --tail 100 backend",
         "compose logs -f --tail 100 db",
         "compose logs -f --tail 100",
+        "compose logs -f --tail 100 caddy",
         "sudo journalctl -u caddy -f -n 100",
     ]
 
@@ -791,8 +795,8 @@ def test_destructive_actions_require_deep_snapshot_and_exact_phrase_first():
         assert body.index("mp_prepare_guard_snapshot") < body.index(phrase)
 
 
-def test_root_reset_is_authentication_scoped_and_domain_change_preserves_docs():
-    """Root recovery preserves other users while RP changes explicitly reset all credentials."""
+def test_root_reset_is_authentication_scoped_and_domain_change_is_topology_aware():
+    """Root recovery is scoped while RP changes preserve the active proxy topology."""
 
     actions = _read("deploy/management/actions.sh")
     root_start = actions.index("mp_reset_root_admin()")
@@ -807,8 +811,11 @@ def test_root_reset_is_authentication_scoped_and_domain_change_preserves_docs():
     assert "DELETE FROM users" not in root_body
     assert "DELETE FROM webauthn_credentials;" in domain_body
     assert "UPDATE users SET is_activated = FALSE" in domain_body
-    assert "info.mp-opt.net remains unchanged" in domain_body
-    assert "info\\.mp-opt\\.net" in domain_body
+    assert 'if [ "$caddy_mode" = "host" ]; then' in domain_body
+    assert 'label == old " {" && !done {sub(old, new); done=1}' in domain_body
+    assert '"$MP_HOST_CADDYFILE"' in domain_body
+    assert "mp_caddy_reload" in domain_body
+    assert "mp_caddy_validate" in domain_body
 
 
 def test_database_wipe_recreates_schema_then_applies_committed_migrations():
@@ -820,11 +827,17 @@ def test_database_wipe_recreates_schema_then_applies_committed_migrations():
     body = actions[start:end]
 
     create_database = body.index("createdb -U masterplan masterplan")
-    start_backend = body.index("up -d --no-deps --force-recreate backend")
+    ensure_base_schema = body.index("mp_ensure_base_schema")
     apply_migrations = body.index("mp_apply_migrations")
     recreate_backend = body.index("mp_recreate_backend", apply_migrations)
-    assert create_database < start_backend < apply_migrations < recreate_backend
+    assert create_database < ensure_base_schema < apply_migrations < recreate_backend
     assert 'mp_guard_rollback "Fresh database schema migration failed."' in body
+
+    common = _read("deploy/management/common.sh")
+    helper_start = common.index("mp_ensure_base_schema()")
+    helper_end = common.index("# Append a sanitised", helper_start)
+    helper_body = common[helper_start:helper_end]
+    assert "up -d --no-deps --force-recreate backend" in helper_body
 
 
 def test_restore_verifies_then_creates_verified_rollback_before_apply():

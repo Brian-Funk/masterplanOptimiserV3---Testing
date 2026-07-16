@@ -345,6 +345,74 @@ def test_live_log_viewer_streams_stops_producer_and_cleans_file(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
+def test_live_log_viewer_stops_nested_process_tree(tmp_path: Path):
+    """Closing live logs must not orphan nested Compose-like subprocesses."""
+
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "MP_ROOT": str(tmp_path),
+            "MP_HOME": str(tmp_path / "home"),
+            "MP_STATE": str(tmp_path / "state"),
+            "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
+            "MP_TUI": "ansi",
+        }
+    )
+    command = r"""
+        source deploy/management/common.sh
+        source deploy/management/actions.sh
+        mp_initialise_paths
+        parent_file="$MP_STATE/nested-parent"
+        child_file="$MP_STATE/nested-child"
+        cleanup_nested() {
+            [ ! -s "$child_file" ] || kill -KILL "$(cat "$child_file")" 2>/dev/null || true
+            [ ! -s "$parent_file" ] || kill -KILL "$(cat "$parent_file")" 2>/dev/null || true
+        }
+        trap cleanup_nested EXIT
+        mp_follow_logs() {
+            MP_TEST_PARENT_FILE="$parent_file" MP_TEST_CHILD_FILE="$child_file" bash -c '
+                printf "%s\n" "$BASHPID" > "$MP_TEST_PARENT_FILE"
+                bash -c '\''
+                    printf "%s\n" "$BASHPID" > "$MP_TEST_CHILD_FILE"
+                    while true; do sleep 1; done
+                '\'' &
+                wait
+            '
+        }
+        ui_live_text_file() {
+            local attempt
+            for attempt in $(seq 1 40); do
+                if [ -s "$parent_file" ] && [ -s "$child_file" ]; then
+                    return 0
+                fi
+                sleep 0.025
+            done
+            return 9
+        }
+        mp_show_live_logs backend
+        for attempt in $(seq 1 40); do
+            if ! kill -0 "$(cat "$parent_file")" 2>/dev/null \
+                && ! kill -0 "$(cat "$child_file")" 2>/dev/null; then
+                trap - EXIT
+                exit 0
+            fi
+            sleep 0.025
+        done
+        exit 8
+    """
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_live_log_viewer_reports_source_failure(tmp_path: Path):
     """A failed live source must explain its termination inside the viewer."""
 
@@ -854,3 +922,54 @@ def test_restore_verifies_then_creates_verified_rollback_before_apply():
     apply_selected = body.index('mp_snapshot_apply "$selected"')
     assert first_verify < pre_create < pre_verify < apply_selected
     assert 'mp_snapshot_apply "$pre_snapshot"' in body
+
+
+def test_management_audit_chain_verifier_detects_tampering(tmp_path: Path):
+    """Audit verification must accept intact receipts and reject edited history."""
+    common = _server_root() / "deploy" / "management" / "common.sh"
+    audit_file = tmp_path / "management.log"
+    command = f'''
+        export MP_AUDIT_FILE="{audit_file}"
+        source "{common}"
+        : > "$MP_AUDIT_FILE"
+        mp_audit "drill.start" "success" "baseline"
+        mp_audit "drill.checkpoint" "success" "before-wipe"
+        mp_verify_audit_chain
+        sed -i 's/before-wipe/after-wipe/' "$MP_AUDIT_FILE"
+        ! mp_verify_audit_chain
+    '''
+
+    result = subprocess.run(
+        ["bash", "-Eeuo", "pipefail", "-c", command],
+        cwd=_server_root(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_recovery_evidence_is_redacted_hashed_and_available_from_menu():
+    """Recovery checkpoints must expose hashes and metadata without raw values."""
+    actions = _read("deploy/management/actions.sh")
+    common = _read("deploy/management/common.sh")
+    menu = _read("manage.sh")
+
+    start = actions.index("mp_collect_recovery_evidence()")
+    end = actions.index("mp_collect_recovery_evidence_interactive()")
+    body = actions[start:end]
+    assert "database-fingerprints.tsv" in body
+    assert "protected-files.tsv" in body
+    assert "schema.sha256" in body
+    assert "snapshot-archives.sha256" in body
+    assert "evidence.sha256" in body
+    assert "sha256sum -c evidence.sha256" in body
+    assert "credential_id, public_key" in body
+    assert 'cat "$MP_ROOT/.env"' not in body
+    assert 'cat "$file"' not in body
+    assert "session_token" not in body
+    assert "csrf_token" not in body
+    assert "mp_verify_audit_chain()" in common
+    assert '"recovery-evidence" "Create a hashed recovery-test checkpoint"' in menu
+    assert '"audit-verify" "Verify the management audit hash chain"' in menu

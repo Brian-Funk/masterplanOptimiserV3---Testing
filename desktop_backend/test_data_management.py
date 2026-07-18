@@ -1,5 +1,12 @@
 """Tests for data management endpoints — export, import, copy-from-event."""
+from datetime import date
+
 from sqlalchemy import text
+
+from app.models.event import Event
+from app.models.location import Location
+from app.models.task_instance import TaskInstance
+from app.models.task_template import TaskTemplate
 
 from desktop_backend.conftest import (
     create_test_event, create_test_location, create_test_person,
@@ -80,6 +87,239 @@ def issue_titles(payload):
         for key in ("errors", "warnings", "info")
         for issue in payload.get(key, [])
     }
+
+
+def create_copy_event(db, name, start_date, end_date, *, overnight=False):
+    """Create an event with an explicit date range for copy tests."""
+    event = Event(
+        name=name,
+        start_date=start_date,
+        end_date=end_date,
+        meta_data={
+            "schedule_day_range": {
+                "startHour": 6,
+                "endHour": 28 if overnight else 24,
+            }
+        },
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def create_copy_template(db):
+    """Create a task template with a concrete start/end time field."""
+    template = TaskTemplate(
+        machine_name="copy_test_task",
+        name="Copy Test Task",
+        fields=[
+            {
+                "id": "slot",
+                "name": "Time",
+                "type": "start_end_time",
+                "category": "conditions",
+            }
+        ],
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+# ═══════════════════════════════════════════════════════════
+# COPY FROM EVENT
+# ═══════════════════════════════════════════════════════════
+
+
+def test_copy_task_structure_maps_relative_and_overnight_dates(db, client):
+    """Task structure is shifted to target working days, including overnight dates."""
+    source = create_copy_event(
+        db, "Source", date(2026, 8, 1), date(2026, 8, 3), overnight=True
+    )
+    target = create_copy_event(
+        db, "Target", date(2026, 9, 10), date(2026, 9, 12), overnight=True
+    )
+    template = create_copy_template(db)
+    db.add_all([
+        TaskInstance(
+            event_id=source.id,
+            template_id=template.id,
+            name="Day two task",
+            date="2026-08-02",
+            day_index=1,
+            field_values={"slot": {"start": "10:00", "end": "11:00"}},
+        ),
+        TaskInstance(
+            event_id=source.id,
+            template_id=template.id,
+            name="Final night task",
+            date="2026-08-04",
+            day_index=2,
+            field_values={"slot": {"start": "02:00", "end": "03:00"}},
+        ),
+    ])
+    db.commit()
+
+    response = client.post(
+        "/api/v1/data/copy-from-event",
+        json={
+            "source_event_id": source.id,
+            "target_event_id": target.id,
+            "include": ["task_structure"],
+        },
+    )
+
+    assert response.status_code == 200
+    copied = (
+        db.query(TaskInstance)
+        .filter(TaskInstance.event_id == target.id)
+        .order_by(TaskInstance.id)
+        .all()
+    )
+    assert [(item.date, item.day_index) for item in copied] == [
+        ("2026-09-11", 1),
+        ("2026-09-13", 2),
+    ]
+    assert all(item.optimised is None and item.final is None for item in copied)
+
+
+def test_copy_task_structure_blocks_short_target_atomically(db, client):
+    """An undersized target rejects the complete copy before any selected data is written."""
+    source = create_copy_event(db, "Source", date(2026, 8, 1), date(2026, 8, 3))
+    target = create_copy_event(db, "Target", date(2026, 9, 10), date(2026, 9, 10))
+    template = create_copy_template(db)
+    db.add(Location(event_id=source.id, name="Source hall"))
+    db.add(TaskInstance(
+        event_id=source.id,
+        template_id=template.id,
+        name="Third day task",
+        date="2026-08-03",
+        day_index=2,
+        field_values={"slot": {"start": "10:00", "end": "11:00"}},
+    ))
+    db.commit()
+
+    response = client.post(
+        "/api/v1/data/copy-from-event",
+        json={
+            "source_event_id": source.id,
+            "target_event_id": target.id,
+            "include": ["locations", "task_structure"],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "target project has only 1 day" in response.json()["detail"]
+    assert db.query(Location).filter(Location.event_id == target.id).count() == 0
+    assert db.query(TaskInstance).filter(TaskInstance.event_id == target.id).count() == 0
+
+
+def test_copied_task_date_repair_previews_and_applies_safe_skeletons(db, client):
+    """Repair changes only selected unscheduled skeletons that still match the source."""
+    source = create_copy_event(db, "Source", date(2026, 8, 1), date(2026, 8, 3))
+    target = create_copy_event(db, "Target", date(2026, 9, 10), date(2026, 9, 12))
+    template = create_copy_template(db)
+    source_task = TaskInstance(
+        event_id=source.id,
+        template_id=template.id,
+        name="Copied skeleton",
+        date="2026-08-02",
+        day_index=1,
+        field_values={"slot": {"start": "10:00", "end": "11:00"}},
+    )
+    stale_copy = TaskInstance(
+        event_id=target.id,
+        template_id=template.id,
+        name="Copied skeleton",
+        date="2026-08-02",
+        day_index=1,
+        field_values={"slot": {"start": "10:00", "end": "11:00"}},
+    )
+    scheduled_copy = TaskInstance(
+        event_id=target.id,
+        template_id=template.id,
+        name="Copied skeleton",
+        date="2026-08-02",
+        day_index=1,
+        field_values={"slot": {"start": "10:00", "end": "11:00"}},
+        final={"start_time": 600, "end_time": 660},
+    )
+    db.add_all([source_task, stale_copy, scheduled_copy])
+    db.commit()
+    db.refresh(stale_copy)
+    db.refresh(scheduled_copy)
+
+    preview = client.post(
+        "/api/v1/data/copy-from-event/repair-preview",
+        json={"source_event_id": source.id, "target_event_id": target.id},
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["repairable_count"] == 1
+    assert preview.json()["candidates"] == [{
+        "task_instance_id": stale_copy.id,
+        "name": "Copied skeleton",
+        "current_date": "2026-08-02",
+        "proposed_date": "2026-09-11",
+        "proposed_day_index": 1,
+        "repairable": True,
+        "reason": None,
+    }]
+
+    applied = client.post(
+        "/api/v1/data/copy-from-event/repair",
+        json={
+            "source_event_id": source.id,
+            "target_event_id": target.id,
+            "task_instance_ids": [stale_copy.id],
+        },
+    )
+
+    assert applied.status_code == 200
+    db.refresh(stale_copy)
+    db.refresh(scheduled_copy)
+    assert (stale_copy.date, stale_copy.day_index) == ("2026-09-11", 1)
+    assert scheduled_copy.date == "2026-08-02"
+
+
+def test_copied_task_date_repair_rejects_stale_selection(db, client):
+    """Repair refuses IDs that no longer belong to the current safe preview."""
+    source = create_copy_event(db, "Source", date(2026, 8, 1), date(2026, 8, 2))
+    target = create_copy_event(db, "Target", date(2026, 9, 10), date(2026, 9, 11))
+    template = create_copy_template(db)
+    source_task = TaskInstance(
+        event_id=source.id,
+        template_id=template.id,
+        name="Copied skeleton",
+        date="2026-08-01",
+        field_values={"slot": {"start": "10:00", "end": "11:00"}},
+    )
+    stale_copy = TaskInstance(
+        event_id=target.id,
+        template_id=template.id,
+        name="Copied skeleton",
+        date="2026-08-01",
+        field_values={"slot": {"start": "10:00", "end": "11:00"}},
+    )
+    db.add_all([source_task, stale_copy])
+    db.commit()
+    db.refresh(stale_copy)
+
+    stale_copy.name = "Changed after preview"
+    db.commit()
+    response = client.post(
+        "/api/v1/data/copy-from-event/repair",
+        json={
+            "source_event_id": source.id,
+            "target_event_id": target.id,
+            "task_instance_ids": [stale_copy.id],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "preview is stale" in response.json()["detail"]
 
 
 # ═══════════════════════════════════════════════════════════

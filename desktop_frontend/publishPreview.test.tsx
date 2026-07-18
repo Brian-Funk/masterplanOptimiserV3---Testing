@@ -135,6 +135,30 @@ describe("publish preview derivation", () => {
     ]);
   });
 
+  it("treats configured event days as authoritative for all-day publishing", () => {
+    const preview = derivePublishPreview({
+      publishTarget: "mp-backend",
+      scope: "all_days",
+      dayStatuses: [
+        dayStatus("2026-08-01"),
+        dayStatus("2026-07-10", { isPublishable: false }),
+      ],
+      taskInstances: [
+        task(1, "2026-08-01"),
+        task(2, "2026-07-10", { event_id: 2, optimised: null, final: null }),
+      ],
+      allDayIds: ["2026-08-01", "2026-08-02"],
+      getDayLabel: labelDay,
+    });
+
+    expect(preview.days.map((day) => day.dayId)).toEqual([
+      "2026-08-01",
+      "2026-08-02",
+    ]);
+    expect(preview.days.some((day) => day.dayId === "2026-07-10")).toBe(false);
+    expect(preview.totalDays).toBe(2);
+  });
+
   it("blocks publishing when no destination is configured", () => {
     const preview = derivePublishPreview({
       publishTarget: "none",

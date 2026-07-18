@@ -146,7 +146,13 @@ def test_flow_api_scopes_one_off_unavailability_to_selected_day(db, client):
     assert blocked.json()["feasible"] is False
     assert any("Evening Meeting" in error for error in blocked.json()["errors"])
     assert available.status_code == 200
-    assert available.json() == {"errors": [], "feasible": True}
+    available_payload = available.json()
+    assert available_payload["errors"] == []
+    assert available_payload["feasible"] is True
+    assert available_payload["diagnostics"]["schema_version"] == 1
+    assert available_payload["diagnostics"]["status"] == "feasible"
+    assert available_payload["diagnostics"]["checked_scope"] == "full"
+    assert available_payload["diagnostics"]["issues"] == []
 
 
 def test_optimiser_does_not_select_unavailable_capability_provider(db):

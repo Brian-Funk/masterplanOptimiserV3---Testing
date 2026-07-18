@@ -825,6 +825,9 @@ def test_snapshots_are_encrypted_versioned_and_hash_verified():
 
     snapshots = _read("deploy/management/snapshots.sh")
     common = _read("deploy/management/common.sh")
+    portable = _read("deploy/management/portable_snapshots.sh")
+    rotation = _read("deploy/management/recovery_rotation.sh")
+    ha = _read("deploy/management/ha.sh")
 
     assert "mp-opt-snapshot-v2" in snapshots
     assert "mp-opt-snapshot-receipt-v2" in snapshots
@@ -842,6 +845,22 @@ def test_snapshots_are_encrypted_versioned_and_hash_verified():
     assert '.verification = "deep-verified"' in snapshots
     assert "/dev/shm" in common
     assert "AGE-SECRET-KEY-1" in common
+    assert "HA_RECOVERY_STORAGE_MODE" in common
+    assert "manual_portable" in common
+    assert "ssh_archive" in common
+    assert "mp-opt-manual-recovery-export-v1" in portable
+    assert "operator-sha256-confirmed" in portable
+    assert "package_sha256" in portable
+    assert "mp_portable_record_confirmed_export" in portable
+    assert "mp_rotation_finalize_portable_export" in portable
+    assert "awaiting-portable-export" in rotation
+    assert "ROTATE WITHOUT OLD KEY" in rotation
+    assert "ROTATE RECOVERY KEY" in rotation
+    assert 'mp_snapshot_copy_off_server "$baseline"' in rotation
+    assert "Manual workstation export" in ha
+    assert "Passwordless SSH verification failed" in ha
+    assert "local_path" not in rotation
+    assert "AGE-SECRET-KEY-" not in rotation
 
 
 def test_destructive_actions_require_deep_snapshot_and_exact_phrase_first():

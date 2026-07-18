@@ -826,8 +826,10 @@ def test_snapshots_are_encrypted_versioned_and_hash_verified():
     snapshots = _read("deploy/management/snapshots.sh")
     common = _read("deploy/management/common.sh")
 
-    assert "mp-opt-snapshot-v1" in snapshots
-    assert "mp-opt-snapshot-receipt-v1" in snapshots
+    assert "mp-opt-snapshot-v2" in snapshots
+    assert "mp-opt-snapshot-receipt-v2" in snapshots
+    assert "mp-opt-snapshot-v1" not in snapshots
+    assert "mp-opt-snapshot-receipt-v1" not in snapshots
     assert 'age -r "$recipient"' in snapshots
     assert 'age -d -i "$identity_file"' in snapshots
     assert '| tar -tf - > "$members" || return 1' in snapshots

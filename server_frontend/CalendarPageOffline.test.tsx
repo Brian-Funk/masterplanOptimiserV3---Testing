@@ -6,7 +6,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 const mockPush = vi.hoisted(() => vi.fn());
+const mockReplace = vi.hoisted(() => vi.fn());
 const mockUseAuth = vi.hoisted(() => vi.fn());
+const mockUseServiceAvailability = vi.hoisted(() => vi.fn());
 const mockApiFetch = vi.hoisted(() => vi.fn());
 const mockGetOfflineCalendarPayload = vi.hoisted(() => vi.fn());
 const mockStoreOfflineCalendarPayload = vi.hoisted(() => vi.fn());
@@ -15,12 +17,16 @@ const mockRoute = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockRoute.searchParams,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: mockUseAuth,
+}));
+
+vi.mock("@/contexts/ServiceAvailabilityContext", () => ({
+  useServiceAvailability: () => mockUseServiceAvailability(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -141,7 +147,15 @@ function authState(overrides = {}) {
 describe("CalendarPage offline cache", () => {
   beforeEach(() => {
     mockPush.mockReset();
+    mockReplace.mockReset();
     mockUseAuth.mockReset();
+    mockUseServiceAvailability.mockReset();
+    mockUseServiceAvailability.mockReturnValue({
+      state: "device_offline",
+      status: null,
+      isReady: false,
+      refresh: vi.fn(),
+    });
     mockApiFetch.mockReset();
     mockGetOfflineCalendarPayload.mockReset();
     mockStoreOfflineCalendarPayload.mockReset();
@@ -163,9 +177,8 @@ describe("CalendarPage offline cache", () => {
 
     expect(await screen.findByText("Cached Masterplan")).toBeInTheDocument();
     expect(screen.getByText("Opening Session")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Offline - showing cached schedule from/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText("You are offline")).toBeInTheDocument();
+    expect(screen.getByText(/Showing the read-only schedule saved at/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Commit" })).toBeDisabled();
     expect(mockApiFetch).not.toHaveBeenCalled();
   });
@@ -177,9 +190,11 @@ describe("CalendarPage offline cache", () => {
     const { default: CalendarPage } = await import("@/app/calendar/page");
     render(<CalendarPage />);
 
+    expect(await screen.findByText("You are offline")).toBeInTheDocument();
     expect(
-      await screen.findByText("You are offline and no cached schedule is available."),
+      screen.getByText("Reconnect for live schedule access. No saved schedule is available on this device."),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /view saved schedule/i })).not.toBeInTheDocument();
   });
 
   it("does not reveal cached data after offline access expires", async () => {
@@ -200,13 +215,19 @@ describe("CalendarPage offline cache", () => {
     render(<CalendarPage />);
 
     expect(
-      await screen.findByText("Offline access expired. Please reconnect and sign in again."),
+      await screen.findByText("Saved-schedule access has expired. Reconnect and sign in again."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Cached Masterplan")).not.toBeInTheDocument();
     expect(mockGetOfflineCalendarPayload).not.toHaveBeenCalled();
   });
 
   it("falls back to cached calendar data after an online fetch failure", async () => {
+    mockUseServiceAvailability.mockReturnValue({
+      state: "ready",
+      status: null,
+      isReady: true,
+      refresh: vi.fn(),
+    });
     mockUseAuth.mockReturnValue(
       authState({
         user,
@@ -230,6 +251,12 @@ describe("CalendarPage offline cache", () => {
   });
 
   it("stores live calendar data after a successful online fetch", async () => {
+    mockUseServiceAvailability.mockReturnValue({
+      state: "ready",
+      status: null,
+      isReady: true,
+      refresh: vi.fn(),
+    });
     mockUseAuth.mockReturnValue(
       authState({
         user,

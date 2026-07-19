@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import React from "react";
 
-const mockPush = vi.hoisted(() => vi.fn());
+const mockReplace = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
 function storeOfflineMarker(validUntil: string): void {
@@ -26,18 +26,18 @@ function storeOfflineMarker(validUntil: string): void {
 
 describe("HomePage", () => {
   beforeEach(() => {
-    mockPush.mockReset();
+    mockReplace.mockReset();
     localStorage.clear();
   });
 
-  it("redirects to the cached calendar route when offline access is valid", async () => {
+  it("routes through login when offline access is valid", async () => {
     storeOfflineMarker("2999-05-21T23:59:59.999Z");
 
     const { default: HomePage } = await import("@/app/page");
     render(<HomePage />);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/calendar?event=9");
+      expect(mockReplace).toHaveBeenCalledWith("/login");
     });
   });
 
@@ -46,7 +46,7 @@ describe("HomePage", () => {
     render(<HomePage />);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/login");
+      expect(mockReplace).toHaveBeenCalledWith("/login");
     });
   });
 
@@ -57,7 +57,7 @@ describe("HomePage", () => {
     render(<HomePage />);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/login");
+      expect(mockReplace).toHaveBeenCalledWith("/login");
     });
   });
 });

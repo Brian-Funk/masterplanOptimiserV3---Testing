@@ -5,6 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockFetch = vi.hoisted(() => vi.fn());
 
+vi.mock("@/contexts/ServiceAvailabilityContext", () => ({
+  useServiceAvailability: () => ({
+    state: "ready",
+    status: null,
+    isReady: true,
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock("@/components/Logo", () => ({ Logo: () => <div>Masterplan Optimiser</div> }));
 vi.mock("@/components/ThemeToggle", () => ({ ThemeToggle: () => <button>Theme</button> }));
 vi.mock("@/lib/environment", () => ({ getApiUrl: () => "https://server.test" }));

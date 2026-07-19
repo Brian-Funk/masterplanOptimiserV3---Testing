@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getOrderedPublicScheduleViews,
   getPublicScheduleItemsForView,
-  getPublicScheduleViewsForDate,
 } from "@/lib/publicScheduleViews";
 
 const views = [
-  { id: "10", name: "Delegates", sort_order: 0 },
-  { id: "11", name: "Officials", sort_order: 1 },
+  { id: "10", name: "Delegates", sort_order: 1 },
+  { id: "11", name: "Officials", sort_order: 0 },
 ];
 
 const items = [
@@ -28,12 +28,9 @@ const items = [
   },
 ];
 
-describe("public schedule view filtering", () => {
-  it("shows only schedule views populated on the selected date", () => {
-    expect(getPublicScheduleViewsForDate(views, items, "2026-08-01")).toEqual([
-      views[0],
-      views[1],
-    ]);
+describe("public schedule item filtering", () => {
+  it("keeps every configured view available regardless of the selected date", () => {
+    expect(getOrderedPublicScheduleViews(views)).toEqual([views[1], views[0]]);
   });
 
   it("returns sorted items for the selected view and date", () => {

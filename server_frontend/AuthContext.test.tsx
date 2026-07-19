@@ -7,6 +7,15 @@ import React from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { storeOfflineAccessForCalendar } from "@/lib/offlineAccess";
 
+vi.mock("@/contexts/ServiceAvailabilityContext", () => ({
+  useServiceAvailability: () => ({
+    state: "ready",
+    status: null,
+    isReady: true,
+    refresh: vi.fn(),
+  }),
+}));
+
 // Mock fetch globally
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);

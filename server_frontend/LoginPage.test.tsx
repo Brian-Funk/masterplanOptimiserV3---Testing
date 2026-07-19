@@ -8,8 +8,13 @@ import React from "react";
 
 // Mock next/navigation
 const mockPush = vi.fn();
+const mockUseServiceAvailability = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+}));
+
+vi.mock("@/contexts/ServiceAvailabilityContext", () => ({
+  useServiceAvailability: () => mockUseServiceAvailability(),
 }));
 
 // Mock @simplewebauthn/browser
@@ -56,6 +61,13 @@ beforeEach(() => {
   mockFetch.mockReset();
   mockRefreshUser.mockReset();
   vi.mocked(startAuthentication).mockReset();
+  mockUseServiceAvailability.mockReset();
+  mockUseServiceAvailability.mockReturnValue({
+    state: "ready",
+    status: null,
+    isReady: true,
+    refresh: vi.fn(),
+  });
   // Reset useAuth to default unauthenticated state
   vi.mocked(useAuth).mockImplementation(() => ({
     user: null,
@@ -223,7 +235,7 @@ describe("LoginPage", () => {
     });
   });
 
-  it("redirects offline access with an event to /calendar", async () => {
+  it("offers the explicitly cached schedule while the service is offline", async () => {
     const { useAuth } = await import("@/contexts/AuthContext");
     vi.mocked(useAuth).mockReturnValue({
       user: null,
@@ -242,14 +254,22 @@ describe("LoginPage", () => {
       refreshUser: vi.fn(),
     });
 
-    mockFetch.mockRejectedValue(new Error("Network error"));
+    mockUseServiceAvailability.mockReturnValue({
+      state: "device_offline",
+      status: null,
+      isReady: false,
+      refresh: vi.fn(),
+    });
 
     const { default: LoginPage } = await import("@/app/login/page");
     render(<LoginPage />);
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/calendar?event=2");
+    const savedSchedule = await screen.findByRole("link", {
+      name: /view saved schedule/i,
     });
+    expect(savedSchedule).toHaveAttribute("href", "/calendar?event=2&mode=cached");
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("redirects user without event to /admin", async () => {

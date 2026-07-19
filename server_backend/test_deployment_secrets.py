@@ -74,7 +74,9 @@ def test_activation_email_brand_and_qr_assets_are_packaged_predictably():
 
     assert "SMTP_FROM_NAME=Masterplan Access" in example_env
     assert 'smtp_from_name="Masterplan Access"' in management_actions
-    assert "fonts-dejavu-core" in dockerfile
+    assert "FROM python:3.11-alpine" in dockerfile
+    assert "apk add --no-cache font-dejavu" in dockerfile
+    assert "fonts-dejavu-core" not in dockerfile
     assert (
         "COPY web/public/logo_normal.png /app/app/assets/logo_normal.png"
         in dockerfile
@@ -101,16 +103,33 @@ def test_blank_database_base_schema_runs_before_dynamic_migrations():
     common = (root / "deploy" / "management" / "common.sh").read_text(
         encoding="utf-8",
     )
-    backend_build = '"${MP_COMPOSE[@]}" build backend'
+    build_loop = "for service in db caddy backend; do"
+    service_build = '"${MP_COMPOSE[@]}" build --pull "$service"'
+    database_start = '"${MP_COMPOSE[@]}" up -d db'
     base_schema = "mp_ensure_base_schema"
     migrations = "mp_apply_migrations"
+    schema_contract = "mp_verify_database_schema_contract"
     application_start = (
         '"${MP_COMPOSE[@]}" up -d --build --force-recreate --remove-orphans'
     )
 
-    assert deploy_script.index(backend_build) < deploy_script.index(base_schema)
-    assert deploy_script.index(base_schema) < deploy_script.index(migrations)
-    assert deploy_script.index(migrations) < deploy_script.index(application_start)
+    build_loop_index = deploy_script.index(build_loop)
+    service_build_index = deploy_script.index(service_build, build_loop_index)
+    database_start_index = deploy_script.index(database_start, service_build_index)
+    base_schema_index = deploy_script.index(base_schema, database_start_index)
+    migrations_index = deploy_script.index(migrations, base_schema_index)
+    schema_contract_index = deploy_script.index(schema_contract, migrations_index)
+    application_start_index = deploy_script.index(
+        application_start,
+        schema_contract_index,
+    )
+
+    assert build_loop_index < service_build_index
+    assert service_build_index < database_start_index
+    assert database_start_index < base_schema_index
+    assert base_schema_index < migrations_index
+    assert migrations_index < schema_contract_index
+    assert schema_contract_index < application_start_index
     assert "deploy/migrations/*.sql" in common
     assert "basename \"$migration\"" in common
     assert "20260714_activation_email_delivery.sql" not in deploy_script

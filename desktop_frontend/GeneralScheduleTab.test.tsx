@@ -16,12 +16,25 @@ const mocks = vi.hoisted(() => ({
   getPersons: vi.fn(),
   getSettings: vi.fn(),
   publishGeneralSchedule: vi.fn(),
+  createElement: vi.fn(),
+  updateElement: vi.fn(),
+  duplicateElement: vi.fn(),
+  copyElements: vi.fn(),
+  bulkCreateElements: vi.fn(),
   bulkUpdateElements: vi.fn(),
   addToast: vi.fn(),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ addToast: mocks.addToast }),
+}));
+
+vi.mock("@/contexts/ShortcutContext", () => ({
+  useShortcuts: () => ({ matchesShortcut: () => false }),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -31,11 +44,12 @@ vi.mock("@/lib/api", () => ({
     getScheduleViews: mocks.getScheduleViews,
     getElements: mocks.getElements,
     getPublishState: mocks.getPublishState,
-    createElement: vi.fn(),
-    updateElement: vi.fn(),
+    createElement: mocks.createElement,
+    bulkCreateElements: mocks.bulkCreateElements,
+    updateElement: mocks.updateElement,
     deleteElement: vi.fn(),
-    duplicateElement: vi.fn(),
-    copyElements: vi.fn(),
+    duplicateElement: mocks.duplicateElement,
+    copyElements: mocks.copyElements,
     bulkUpdateElements: mocks.bulkUpdateElements,
   },
   locationsApi: { getAll: mocks.getLocations },
@@ -112,6 +126,21 @@ describe("GeneralScheduleTab publishing", () => {
       status: "ok",
       items_published: 1,
     });
+    mocks.createElement.mockImplementation(async (_eventId, payload) => ({
+      ...publicElement,
+      ...payload,
+      id: 30,
+      event_id: 7,
+    }));
+    mocks.updateElement.mockImplementation(async (_eventId, id, payload) => ({
+      ...publicElement,
+      ...payload,
+      id,
+      event_id: 7,
+    }));
+    mocks.bulkCreateElements.mockResolvedValue([]);
+    mocks.copyElements.mockResolvedValue([]);
+    mocks.bulkUpdateElements.mockResolvedValue([]);
   });
 
   it("allows retrying a selected day after a previous failure", async () => {
@@ -203,5 +232,49 @@ describe("GeneralScheduleTab publishing", () => {
 
     expect(await screen.findByText("Up to date")).toBeInTheDocument();
     expect(screen.queryByText("Changes pending")).not.toBeInTheDocument();
+  });
+
+  it("quick-adds the next item with inherited public settings without a full reload", async () => {
+    const user = userEvent.setup();
+    render(<GeneralScheduleTab selectedEvent={selectedEvent} />);
+
+    await user.click(await screen.findByRole("button", { name: "Add schedule item" }));
+    expect(screen.getByRole("textbox", { name: "Schedule item title" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Start time")).toHaveValue("10:00");
+    expect(screen.getByLabelText("End time")).toHaveValue("11:00");
+
+    await user.type(screen.getByRole("textbox", { name: "Schedule item title" }), "Workshop");
+    await user.click(screen.getByRole("button", { name: "Save new schedule item" }));
+
+    await waitFor(() => expect(mocks.createElement).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        title: "Workshop",
+        start_time: "10:00",
+        end_time: "11:00",
+        schedule_view_ids: [20],
+      }),
+    ));
+    expect(mocks.getElements).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Workshop")).toBeInTheDocument();
+  });
+
+  it("uses an explicit assignment operation for bulk edits", async () => {
+    const user = userEvent.setup();
+    mocks.bulkUpdateElements.mockResolvedValue([{ ...publicElement, schedule_view_ids: [] }]);
+    render(<GeneralScheduleTab selectedEvent={selectedEvent} />);
+
+    await user.click(await screen.findByRole("checkbox", { name: "Select Opening" }));
+    await user.click(screen.getByRole("button", { name: "Edit selected" }));
+    await user.click(screen.getByRole("checkbox", { name: "Change public views" }));
+    await user.selectOptions(screen.getByLabelText("Public view change operation"), "remove");
+    await user.click(screen.getByRole("button", { name: "Apply changes" }));
+
+    await waitFor(() => expect(mocks.bulkUpdateElements).toHaveBeenCalledWith(
+      7,
+      [10],
+      { schedule_view_change: { operation: "remove", ids: [20] } },
+    ));
+    expect(mocks.getElements).toHaveBeenCalledTimes(1);
   });
 });

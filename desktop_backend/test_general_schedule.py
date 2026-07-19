@@ -329,3 +329,116 @@ def test_copy_elements_preserves_after_midnight_working_day_slots(db, client):
     assert copied.status_code == 200
     assert copied.json()[0]["date"] == "2026-08-04"
     assert copied.json()[0]["start_time"] == "01:00"
+
+
+def test_bulk_update_supports_opt_in_fields_and_assignment_operations(db, client):
+    event = create_test_event(db)
+    first_type_id, _ = _create_type(client, event.id)
+    second_type = client.post(
+        f"/api/v1/general-schedule/session-element-types?event_id={event.id}",
+        json={"name": "Plenary", "colour": "#86efac"},
+    ).json()
+    first_view = _create_view(client, event.id, "Delegates")
+    second_view = _create_view(client, event.id, "Officials")
+    team_id = _create_team(client, event.id)
+    location = create_test_location(db, event.id, name="Room B")
+    element_ids = []
+    for index in range(2):
+        created = client.post(
+            f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+            json={
+                "title": f"Item {index}",
+                "date": "2026-08-01",
+                "start_time": f"{9 + index:02d}:00",
+                "end_time": f"{10 + index:02d}:00",
+                "session_element_type_id": first_type_id,
+                "schedule_view_ids": [first_view],
+            },
+        )
+        element_ids.append(created.json()["id"])
+
+    updated = client.patch(
+        f"/api/v1/general-schedule/session-elements/bulk?event_id={event.id}",
+        json={
+            "element_ids": element_ids,
+            "session_element_type_id": second_type["id"],
+            "location_id": location.id,
+            "working_date": "2026-08-02",
+            "shift_minutes": 15,
+            "schedule_view_change": {"operation": "add", "ids": [second_view]},
+            "attendee_team_change": {"operation": "add", "ids": [team_id]},
+        },
+    )
+
+    assert updated.status_code == 200
+    assert [item["start_time"] for item in updated.json()] == ["09:15", "10:15"]
+    assert all(item["date"] == "2026-08-02" for item in updated.json())
+    assert all(item["session_element_type_id"] == second_type["id"] for item in updated.json())
+    assert all(item["location_id"] == location.id for item in updated.json())
+    assert all(item["schedule_view_ids"] == [first_view, second_view] for item in updated.json())
+    assert all(item["attendee_team_ids"] == [team_id] for item in updated.json())
+
+
+def test_bulk_update_is_atomic_and_rejects_cross_event_references(db, client):
+    event = create_test_event(db, name="First")
+    other_event = create_test_event(db, name="Second")
+    type_id, _ = _create_type(client, event.id)
+    foreign_view = _create_view(client, other_event.id, "Foreign")
+    created = client.post(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}",
+        json={
+            "title": "Opening",
+            "date": "2026-08-01",
+            "start_time": "09:00",
+            "end_time": "10:00",
+            "session_element_type_id": type_id,
+        },
+    ).json()
+
+    rejected = client.patch(
+        f"/api/v1/general-schedule/session-elements/bulk?event_id={event.id}",
+        json={
+            "element_ids": [created["id"]],
+            "shift_minutes": 30,
+            "schedule_view_change": {"operation": "add", "ids": [foreign_view]},
+        },
+    )
+
+    assert rejected.status_code == 400
+    unchanged = client.get(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}"
+    ).json()[0]
+    assert unchanged["start_time"] == "09:00"
+    assert unchanged["schedule_view_ids"] == []
+
+
+def test_bulk_create_is_transactional(db, client):
+    event = create_test_event(db)
+    type_id, _ = _create_type(client, event.id)
+    response = client.post(
+        f"/api/v1/general-schedule/session-elements/bulk-create?event_id={event.id}",
+        json={
+            "items": [
+                {
+                    "title": "Valid",
+                    "date": "2026-08-01",
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "session_element_type_id": type_id,
+                },
+                {
+                    "title": "Invalid",
+                    "date": "2026-08-01",
+                    "start_time": "11:00",
+                    "end_time": "10:00",
+                    "session_element_type_id": type_id,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 400
+    remaining = client.get(
+        f"/api/v1/general-schedule/session-elements?event_id={event.id}"
+    )
+    assert remaining.json() == []

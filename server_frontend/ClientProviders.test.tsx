@@ -71,7 +71,10 @@ describe("ClientProviders", () => {
 
     expect(screen.getByText("Shared schedule")).toBeInTheDocument();
     expect(await screen.findByText("Service ready")).toBeInTheDocument();
-    expect(mockFetch).toHaveBeenCalledWith("/ha/status", { cache: "no-store" });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/ha/status",
+      expect.objectContaining({ cache: "no-store", signal: expect.anything() }),
+    );
     expect(
       mockFetch.mock.calls.some(([url]) => String(url).includes("/api/v1/auth/me")),
     ).toBe(false);

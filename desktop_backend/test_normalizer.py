@@ -201,17 +201,16 @@ def test_flow_person_name_metadata_survives_legacy_solver_class(monkeypatch):
 
 
 def test_normalize_person_unavailability():
-    """Person with unavailability intervals in global_data."""
+    """Person with a typed operational unavailability interval."""
     persons = [
         OptimizationPerson(
             id=1,
             first_name="C",
             last_name="D",
-            global_data={
-                "unavailabilities": [
-                    {"from": "2026-06-10T08:00", "to": "2026-06-10T09:00"},
-                ],
-            },
+            unavailabilities=[{
+                "starts_at": "2026-06-10T08:00",
+                "ends_at": "2026-06-10T09:00",
+            }],
         ),
     ]
     result = normalize_optimization_input(
@@ -223,11 +222,10 @@ def test_normalize_person_unavailability():
 
 
 def test_flow_and_optimization_normalizers_scope_dated_unavailability_to_selected_day():
-    global_data = {
-        "unavailabilities": [
-            {"from": "2026-06-10T18:00", "to": "2026-06-10T20:00"},
-        ],
-    }
+    unavailabilities = [{
+        "starts_at": "2026-06-10T18:00",
+        "ends_at": "2026-06-10T20:00",
+    }]
 
     optimisation = normalize_optimization_input(
         tasks=[],
@@ -236,7 +234,7 @@ def test_flow_and_optimization_normalizers_scope_dated_unavailability_to_selecte
                 id=1,
                 first_name="Ben",
                 last_name="Evening",
-                global_data=global_data,
+                unavailabilities=unavailabilities,
             )
         ],
         locations=[],
@@ -251,7 +249,7 @@ def test_flow_and_optimization_normalizers_scope_dated_unavailability_to_selecte
                 id=1,
                 first_name="Ben",
                 last_name="Evening",
-                global_data=global_data,
+                unavailabilities=unavailabilities,
             )
         ],
         locations=[],
@@ -264,11 +262,10 @@ def test_flow_and_optimization_normalizers_scope_dated_unavailability_to_selecte
 
 
 def test_flow_and_optimization_normalizers_apply_dated_unavailability_on_matching_day():
-    global_data = {
-        "unavailabilities": [
-            {"from": "2026-06-10T18:00", "to": "2026-06-10T20:00"},
-        ],
-    }
+    unavailabilities = [{
+        "starts_at": "2026-06-10T18:00",
+        "ends_at": "2026-06-10T20:00",
+    }]
 
     optimisation = normalize_optimization_input(
         tasks=[],
@@ -277,7 +274,7 @@ def test_flow_and_optimization_normalizers_apply_dated_unavailability_on_matchin
                 id=1,
                 first_name="Katya",
                 last_name="Unavailable",
-                global_data=global_data,
+                unavailabilities=unavailabilities,
             )
         ],
         locations=[],
@@ -292,7 +289,7 @@ def test_flow_and_optimization_normalizers_apply_dated_unavailability_on_matchin
                 id=1,
                 first_name="Katya",
                 last_name="Unavailable",
-                global_data=global_data,
+                unavailabilities=unavailabilities,
             )
         ],
         locations=[],
@@ -305,12 +302,6 @@ def test_flow_and_optimization_normalizers_apply_dated_unavailability_on_matchin
 
 
 def test_unavailability_respects_working_day_boundary_tail():
-    global_data = {
-        "unavailabilities": [
-            {"from": "2026-06-11T01:00", "to": "2026-06-11T02:00"},
-        ],
-    }
-
     result = normalize_optimization_input(
         tasks=[],
         persons=[
@@ -318,7 +309,10 @@ def test_unavailability_respects_working_day_boundary_tail():
                 id=1,
                 first_name="Night",
                 last_name="Tail",
-                global_data=global_data,
+                unavailabilities=[{
+                    "starts_at": "2026-06-11T01:00",
+                    "ends_at": "2026-06-11T02:00",
+                }],
             )
         ],
         locations=[],
@@ -339,11 +333,10 @@ def test_overnight_unavailability_is_continuous_for_working_day():
                 id=1,
                 first_name="Over",
                 last_name="Night",
-                global_data={
-                    "unavailabilities": [
-                        {"from": "2026-06-10T22:00", "to": "2026-06-11T02:00"},
-                    ],
-                },
+                unavailabilities=[{
+                    "starts_at": "2026-06-10T22:00",
+                    "ends_at": "2026-06-11T02:00",
+                }],
             )
         ],
         locations=[],
@@ -356,18 +349,24 @@ def test_overnight_unavailability_is_continuous_for_working_day():
     assert result.persons[0].unavailable_intervals == [(1320, 1560)]
 
 
-def test_legacy_unavailable_intervals_and_time_only_entries_still_work():
+def test_duplicate_typed_unavailability_entries_are_deduplicated():
     result = normalize_optimization_input(
         tasks=[],
         persons=[
             OptimizationPerson(
                 id=1,
-                first_name="Legacy",
+                first_name="Typed",
                 last_name="Intervals",
-                global_data={
-                    "unavailable_intervals": [{"start": 480, "end": 540}],
-                    "unavailabilities": [{"start": "18:00", "end": "20:00"}],
-                },
+                unavailabilities=[
+                    {
+                        "starts_at": "2026-06-10T18:00",
+                        "ends_at": "2026-06-10T20:00",
+                    },
+                    {
+                        "starts_at": "2026-06-10T18:00",
+                        "ends_at": "2026-06-10T20:00",
+                    },
+                ],
             )
         ],
         locations=[],
@@ -376,7 +375,7 @@ def test_legacy_unavailable_intervals_and_time_only_entries_still_work():
         working_day_date="2026-06-10",
     )
 
-    assert result.persons[0].unavailable_intervals == [(480, 540), (1080, 1200)]
+    assert result.persons[0].unavailable_intervals == [(1080, 1200)]
 
 
 def test_invalid_unavailability_is_reported_without_crashing():
@@ -387,7 +386,7 @@ def test_invalid_unavailability_is_reported_without_crashing():
                 id=1,
                 first_name="Invalid",
                 last_name="Entry",
-                global_data={"unavailabilities": [{"from": "", "to": "not-time"}]},
+                unavailabilities=[{"starts_at": "", "ends_at": "not-time"}],
             )
         ],
         locations=[],

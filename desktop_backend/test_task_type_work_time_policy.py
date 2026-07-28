@@ -1,37 +1,22 @@
-"""Persistence compatibility tests for task-type working-time policy."""
+"""Current persistence contract for task-type working-time policy."""
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.orm import Session
 
-from app.main import _run_schema_migrations
+from app.models.task import TaskType
 
 
-def test_legacy_task_types_are_migrated_to_counted_work(tmp_path):
-    """Existing task types receive a non-null, enabled policy by default."""
-    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-task-types.db'}")
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "CREATE TABLE task_types "
-                "(id INTEGER PRIMARY KEY, name VARCHAR NOT NULL)"
-            )
-        )
-        connection.execute(
-            text("INSERT INTO task_types (id, name) VALUES (1, 'Existing')")
-        )
+def test_current_task_types_default_to_counted_work(tmp_path):
+    """The current schema stores an explicit, non-null enabled policy."""
 
-    _run_schema_migrations(engine)
+    engine = create_engine(f"sqlite:///{tmp_path / 'current-task-types.db'}")
+    TaskType.__table__.create(engine)
+    with Session(engine) as session:
+        task_type = TaskType(name="Current")
+        session.add(task_type)
+        session.commit()
+        session.refresh(task_type)
+        assert task_type.counts_towards_work_time is True
 
-    with engine.connect() as connection:
-        value = connection.execute(
-            text(
-                "SELECT counts_towards_work_time FROM task_types WHERE id = 1"
-            )
-        ).scalar_one()
-        columns = {
-            row[1]: row
-            for row in connection.execute(text("PRAGMA table_info(task_types)"))
-        }
-
-    assert value == 1
-    assert columns["counts_towards_work_time"][3] == 1
-    assert columns["counts_towards_work_time"][4] == "1"
+    columns = {column["name"]: column for column in inspect(engine).get_columns("task_types")}
+    assert columns["counts_towards_work_time"]["nullable"] is False

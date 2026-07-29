@@ -122,11 +122,12 @@ def test_flow_api_scopes_one_off_unavailability_to_selected_day(db, client):
                 "last_name": "Evening",
                 "home_location_id": 1,
                 "capabilities": ["staff"],
-                "global_data": {
-                    "unavailabilities": [
-                        {"from": "2026-06-10T18:00", "to": "2026-06-10T20:00"}
-                    ]
-                },
+                "unavailabilities": [
+                    {
+                        "starts_at": "2026-06-10T18:00",
+                        "ends_at": "2026-06-10T20:00",
+                    }
+                ],
             }
         ],
         "locations": [{"id": 1, "name": "Room A"}],
@@ -255,11 +256,12 @@ def test_flow_checker_rejects_unavailability_in_middle_of_long_task():
 
 
 def test_flow_and_optimisation_normalizers_match_boundary_unavailability():
-    global_data = {
-        "unavailabilities": [
-            {"from": "2026-06-11T01:00", "to": "2026-06-11T02:00"},
-        ],
-    }
+    unavailabilities = [
+        {
+            "starts_at": "2026-06-11T01:00",
+            "ends_at": "2026-06-11T02:00",
+        },
+    ]
     optimisation = normalize_optimization_input(
         tasks=[],
         persons=[
@@ -267,7 +269,7 @@ def test_flow_and_optimisation_normalizers_match_boundary_unavailability():
                 id=1,
                 first_name="Night",
                 last_name="Unavailable",
-                global_data=global_data,
+                unavailabilities=unavailabilities,
             )
         ],
         locations=[],
@@ -283,7 +285,7 @@ def test_flow_and_optimisation_normalizers_match_boundary_unavailability():
                 id=1,
                 first_name="Night",
                 last_name="Unavailable",
-                global_data=global_data,
+                unavailabilities=unavailabilities,
             )
         ],
         locations=[FlowLocation(id=1, name="Room A")],

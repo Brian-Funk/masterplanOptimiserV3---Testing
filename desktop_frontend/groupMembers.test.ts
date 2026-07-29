@@ -47,7 +47,7 @@ const resolveAvailability = ({
     persons: [
       {
         id: 1,
-        global_data: { unavailabilities },
+        unavailabilities,
       },
     ],
     taskDate,
@@ -208,7 +208,7 @@ describe("group member availability", () => {
   it("does not move one-off unavailability from the next day onto the task", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-11T09:00", to: "2026-07-11T10:00" },
+        { starts_at: "2026-07-11T09:00", ends_at: "2026-07-11T10:00" },
       ],
     });
 
@@ -219,7 +219,7 @@ describe("group member availability", () => {
   it("does not move one-off unavailability from the previous day onto the task", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-09T09:00", to: "2026-07-09T10:00" },
+        { starts_at: "2026-07-09T09:00", ends_at: "2026-07-09T10:00" },
       ],
     });
 
@@ -230,7 +230,7 @@ describe("group member availability", () => {
   it("excludes a group member for same-day unavailability and labels its date", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-10T09:15", to: "2026-07-10T09:45" },
+        { starts_at: "2026-07-10T09:15", ends_at: "2026-07-10T09:45" },
       ],
     });
 
@@ -245,7 +245,7 @@ describe("group member availability", () => {
   it("infers a normal CMI task date when no selected working day is supplied", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-10T09:15", to: "2026-07-10T09:45" },
+        { starts_at: "2026-07-10T09:15", ends_at: "2026-07-10T09:45" },
       ],
       selectedWorkingDate: null,
       taskDate: "2026-07-10",
@@ -260,7 +260,7 @@ describe("group member availability", () => {
   it("uses both dates for a multi-day unavailability period", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-10T08:00", to: "2026-07-11T10:00" },
+        { starts_at: "2026-07-10T08:00", ends_at: "2026-07-11T10:00" },
       ],
       taskStart: "20:00",
       taskEnd: "21:00",
@@ -272,7 +272,7 @@ describe("group member availability", () => {
   it("matches the next actual date in an overnight working-day tail", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-11T01:00", to: "2026-07-11T02:00" },
+        { starts_at: "2026-07-11T01:00", ends_at: "2026-07-11T02:00" },
       ],
       taskDate: "2026-07-11",
       taskStart: "01:15",
@@ -286,7 +286,7 @@ describe("group member availability", () => {
   it("does not apply the task date twice to already-linear overnight times", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-11T01:00", to: "2026-07-11T02:00" },
+        { starts_at: "2026-07-11T01:00", ends_at: "2026-07-11T02:00" },
       ],
       taskDate: "2026-07-11",
       taskStart: 25 * 60 + 15,
@@ -300,7 +300,7 @@ describe("group member availability", () => {
   it("infers the working date when an overnight calendar conversion has no selected day", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-11T01:00", to: "2026-07-11T02:00" },
+        { starts_at: "2026-07-11T01:00", ends_at: "2026-07-11T02:00" },
       ],
       selectedWorkingDate: null,
       taskDate: "2026-07-11",
@@ -312,7 +312,7 @@ describe("group member availability", () => {
     expect(resolved.personIds).toEqual([]);
   });
 
-  it("continues to apply time-only recurring unavailability", () => {
+  it("ignores retired time-only recurring unavailability", () => {
     const resolved = resolveAvailability({
       unavailabilities: [{ start: "01:00", end: "02:00" }],
       taskDate: "2026-07-11",
@@ -321,13 +321,14 @@ describe("group member availability", () => {
       workingDayBoundaryOffsetHour: 4,
     });
 
-    expect(resolved.personIds).toEqual([]);
+    expect(resolved.personIds).toEqual([1]);
+    expect(resolved.excludedPersons).toEqual([]);
   });
 
   it("keeps explicit person assignments even when the person is unavailable", () => {
     const resolved = resolveAvailability({
       unavailabilities: [
-        { from: "2026-07-10T09:00", to: "2026-07-10T10:00" },
+        { starts_at: "2026-07-10T09:00", ends_at: "2026-07-10T10:00" },
       ],
       direct: true,
     });

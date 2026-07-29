@@ -26,6 +26,17 @@ const {
   prepareDesktopUserData,
   resolveDesktopDataPaths,
 } = userDataPaths;
+const { resolveDesktopRuntimeConfig } = require(
+  path.resolve(
+    process.cwd(),
+    "..",
+    "..",
+    "MasterplanOptimiserV3 - App",
+    "masterplanOptimiserV3 - App",
+    "desktop",
+    "runtime-config.js",
+  ),
+);
 
 function makeTempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mp-update-data-"));
@@ -89,6 +100,29 @@ describe("desktop user-data paths", () => {
     expect(env.ENCRYPTION_KEY_PATH).toBe(paths.encryptionKeyPath);
     expect(env.MASTERPLAN_USER_DATA_DIR).toBe(paths.userDataDir);
     expect(env.MASTERPLAN_DATA_DIR).toBe(paths.dataDir);
+    expect(env.API_PORT).toBe("8000");
+    expect(env.OPTIMIZER_URL).toBe("http://127.0.0.1:8000/compute");
+    expect(JSON.parse(env.CORS_ORIGINS)).toEqual([
+      "http://127.0.0.1:3000",
+      "http://localhost:3000",
+    ]);
+  });
+
+  it("passes dynamic loopback ports to every local service", () => {
+    const paths = resolveDesktopDataPaths(path.join(makeTempRoot(), "user-data"));
+    const runtime = resolveDesktopRuntimeConfig({
+      API_URL: "http://localhost:18123",
+      FRONTEND_URL: "http://127.0.0.1:18124",
+    });
+
+    const env = buildDesktopBackendEnv({}, paths, "token", runtime);
+
+    expect(env.API_PORT).toBe("18123");
+    expect(env.OPTIMIZER_URL).toBe("http://127.0.0.1:18123/compute");
+    expect(JSON.parse(env.CORS_ORIGINS)).toEqual([
+      "http://127.0.0.1:18124",
+      "http://localhost:18124",
+    ]);
   });
 
   it("does not log encryption key contents", () => {

@@ -2,12 +2,15 @@
 
 import hashlib
 import json
+from datetime import datetime
 
 import app.api.v1.mp_backend as mp_backend_module
+from app.core.secure_credentials import mp_backend_secret_key
 from app.models.location import Location
 from app.models.assignment import Assignment
 from app.models.group import Group
 from app.models.person import Person
+from app.models.privacy import PersonUnavailability
 from app.models.task import Task
 from app.models.task_template import TaskTemplate
 from app.models.general_schedule import (
@@ -145,11 +148,18 @@ def create_publish_task(db, event_id, task_type_id, title, day):
     return task
 
 
-def test_mp_backend_publish_filters_tasks_to_requested_day(db, client, monkeypatch):
+def configure_publish_event(event, secure_credential_store):
+    """Configure publishing through the current secure-store-only contract."""
+    event.mp_backend_url = "https://mp.example.test"
+    secure_credential_store.values[mp_backend_secret_key(event.id)] = "secret"
+
+
+def test_mp_backend_publish_filters_tasks_to_requested_day(
+    db, client, monkeypatch, secure_credential_store
+):
     """Publishing one day sends only that day's tasks to MP-Backend."""
     event = create_test_event(db, name="Publish Event")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     task_type = create_test_task_type(db)
     create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
     create_publish_task(db, event.id, task_type.id, "Session Task", "2026-08-02")
@@ -172,11 +182,12 @@ def test_mp_backend_publish_filters_tasks_to_requested_day(db, client, monkeypat
     assert [task["name"] for task in payload["tasks"]] == ["Arrival Task"]
 
 
-def test_mp_backend_publish_without_dates_sends_all_tasks(db, client, monkeypatch):
+def test_mp_backend_publish_without_dates_sends_all_tasks(
+    db, client, monkeypatch, secure_credential_store
+):
     """Publishing without a day subset preserves the existing all-event behaviour."""
     event = create_test_event(db, name="Publish Event")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     task_type = create_test_task_type(db)
     create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
     create_publish_task(db, event.id, task_type.id, "Session Task", "2026-08-02")
@@ -204,31 +215,33 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
     db,
     client,
     monkeypatch,
+    secure_credential_store,
 ):
     """Published group allocations are availability-aware and retain the overnight tail."""
     event = create_test_event(db, name="Overnight Publish")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     event.meta_data = {"schedule_day_range": {"startHour": 6, "endHour": 30}}
     task_type = create_test_task_type(db)
     available = Person(
         event_id=event.id,
         first_name="Ada",
         last_name="Available",
-        global_data={},
     )
     unavailable = Person(
         event_id=event.id,
         first_name="Una",
         last_name="Unavailable",
-        global_data={
-            "unavailabilities": [
-                {"from": "2026-08-02T00:30:00", "to": "2026-08-02T02:00:00"},
-            ],
-        },
     )
     db.add_all([available, unavailable])
     db.flush()
+    db.add(
+        PersonUnavailability(
+            event_id=event.id,
+            person_id=unavailable.id,
+            starts_at=datetime.fromisoformat("2026-08-02T00:30:00"),
+            ends_at=datetime.fromisoformat("2026-08-02T02:00:00"),
+        )
+    )
     group = Group(
         event_id=event.id,
         name="Night Team",
@@ -307,11 +320,10 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
     )
 
 
-def test_mp_backend_publish_rejects_invalid_date(client, db):
+def test_mp_backend_publish_rejects_invalid_date(client, db, secure_credential_store):
     """Invalid day ids are rejected before any external publish call is made."""
     event = create_test_event(db, name="Publish Event")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     db.commit()
 
     response = client.post(
@@ -327,11 +339,11 @@ def test_mp_backend_publish_refuses_selected_day_on_server_without_scoped_suppor
     db,
     client,
     monkeypatch,
+    secure_credential_store,
 ):
     """Older servers must not receive a one-day payload they would full-replace."""
     event = create_test_event(db, name="Publish Event")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     task_type = create_test_task_type(db)
     create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
     db.commit()
@@ -354,11 +366,11 @@ def test_public_schedule_selected_day_publish_filters_items_and_clears_failure(
     db,
     client,
     monkeypatch,
+    secure_credential_store,
 ):
     """A successful selected-day retry clears only that day's stale failure."""
     event = create_test_event(db, name="Public Programme")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     view = ScheduleView(event_id=event.id, name="Public", sort_order=0)
     location = Location(
         event_id=event.id,
@@ -442,11 +454,11 @@ def test_public_schedule_all_days_publish_sends_full_programme(
     db,
     client,
     monkeypatch,
+    secure_credential_store,
 ):
     """Publishing all days sends one full replacement payload."""
     event = create_test_event(db, name="Public Programme")
-    event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "secret"
+    configure_publish_event(event, secure_credential_store)
     view = ScheduleView(event_id=event.id, name="Public", sort_order=0)
     db.add(view)
     db.flush()

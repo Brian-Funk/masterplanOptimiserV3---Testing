@@ -36,6 +36,17 @@ describe("desktop packaged Content Security Policy", () => {
     expect(csp).toContain("https://oauth2.googleapis.com");
   });
 
+  it("limits local connections to the configured backend origins", () => {
+    const csp = buildDesktopContentSecurityPolicy([
+      "http://127.0.0.1:18123",
+      "http://localhost:18123",
+    ]);
+
+    expect(csp).toContain("http://127.0.0.1:18123");
+    expect(csp).toContain("http://localhost:18123");
+    expect(csp).not.toContain("http://127.0.0.1:8000");
+  });
+
   it("does not depend on remote Google font stylesheets", () => {
     const csp = buildDesktopContentSecurityPolicy();
 

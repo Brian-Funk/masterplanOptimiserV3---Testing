@@ -1,10 +1,12 @@
 """Tests for data management endpoints — export, import, copy-from-event."""
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import text
 
 from app.models.event import Event
 from app.models.location import Location
+from app.models.person import Person
+from app.models.privacy import PersonUnavailability
 from app.models.task_instance import TaskInstance
 from app.models.task_template import TaskTemplate
 
@@ -216,6 +218,38 @@ def test_copy_task_structure_blocks_short_target_atomically(db, client):
     assert db.query(TaskInstance).filter(TaskInstance.event_id == target.id).count() == 0
 
 
+def test_copy_persons_assigns_unavailability_to_target_event(db, client):
+    """Copied availability intervals belong to both the copied person and target event."""
+    source = create_copy_event(db, "Source", date(2026, 8, 1), date(2026, 8, 2))
+    target = create_copy_event(db, "Target", date(2026, 9, 1), date(2026, 9, 2))
+    person = create_test_person(db, source.id, "Copy", "Subject")
+    db.add(PersonUnavailability(
+        event_id=source.id,
+        person_id=person.id,
+        starts_at=datetime(2026, 8, 1, 9),
+        ends_at=datetime(2026, 8, 1, 10),
+    ))
+    db.commit()
+
+    response = client.post(
+        "/api/v1/data/copy-from-event",
+        json={
+            "source_event_id": source.id,
+            "target_event_id": target.id,
+            "include": ["persons"],
+        },
+    )
+
+    assert response.status_code == 200
+    copied_person = db.query(Person).filter(Person.event_id == target.id).one()
+    interval = db.query(PersonUnavailability).filter(
+        PersonUnavailability.person_id == copied_person.id
+    ).one()
+    assert interval.event_id == target.id
+    assert interval.starts_at == datetime(2026, 8, 1, 9)
+    assert interval.ends_at == datetime(2026, 8, 1, 10)
+
+
 def test_copied_task_date_repair_previews_and_applies_safe_skeletons(db, client):
     """Repair changes only selected unscheduled skeletons that still match the source."""
     source = create_copy_event(db, "Source", date(2026, 8, 1), date(2026, 8, 3))
@@ -412,6 +446,53 @@ def test_import_roundtrip(db, client):
     assert "Original" in names
 
 
+def test_import_remaps_unavailability_to_imported_event(db, client):
+    """Imported intervals use the new event and person identifiers."""
+    create_test_event(db, name="Existing")
+    payload = valid_import_payload()
+    payload["global_data"] = {
+        key: [] for key in payload["global_data"]
+    }
+    payload["events"][0]["tasks"] = []
+    payload["events"][0]["assignments"] = []
+    payload["events"][0]["optimization_jobs"] = []
+    payload["events"][0]["person_unavailabilities"] = [{
+        "id": 1,
+        "event_id": 1,
+        "person_id": 1,
+        "starts_at": "2026-08-01T09:00:00",
+        "ends_at": "2026-08-01T10:00:00",
+    }]
+
+    response = client.post("/api/v1/data/import", json={"data": payload})
+
+    assert response.status_code == 200
+    imported_event_id = response.json()["imported_event_ids"][0]
+    imported_person = db.query(Person).filter(Person.event_id == imported_event_id).one()
+    interval = db.query(PersonUnavailability).one()
+    assert imported_event_id != 1
+    assert interval.event_id == imported_event_id
+    assert interval.person_id == imported_person.id
+
+
+def test_import_rejects_existing_accountability_identities_before_mutation(db, client):
+    """Restoring over the source project reports a conflict instead of a 500."""
+    event = create_test_event(db, name="Existing")
+    create_test_person(db, event.id, "Existing", "Subject")
+    exported = client.post(
+        "/api/v1/data/export",
+        json={"scope": "event", "event_ids": [event.id]},
+    ).json()
+
+    response = client.post("/api/v1/data/import", json={"data": exported})
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["event_identity_conflicts"] == 1
+    assert response.json()["detail"]["person_identity_conflicts"] == 1
+    assert db.query(Event).count() == 1
+    assert db.query(Person).count() == 1
+
+
 def test_import_preview_summarises_valid_project_payload(client):
     """Preview returns counts and metadata without applying the import."""
     r = client.post(
@@ -547,3 +628,36 @@ def test_data_management_delete_skips_absent_optional_tables(db, client):
 
     assert r.status_code == 200
     assert client.get(f"/api/v1/events/{event_id}").status_code == 404
+
+
+def test_event_delete_and_factory_reset_remove_unavailability(db, client):
+    """Both destructive data-management paths erase typed availability rows."""
+    event = create_test_event(db, name="Delete availability")
+    person = create_test_person(db, event.id, "Delete", "Subject")
+    db.add(PersonUnavailability(
+        event_id=event.id,
+        person_id=person.id,
+        starts_at=datetime(2026, 8, 1, 9),
+        ends_at=datetime(2026, 8, 1, 10),
+    ))
+    db.commit()
+
+    deleted = client.delete(f"/api/v1/data/event/{event.id}")
+
+    assert deleted.status_code == 200
+    assert db.query(PersonUnavailability).count() == 0
+
+    reset_event = create_test_event(db, name="Reset availability")
+    reset_person = create_test_person(db, reset_event.id, "Reset", "Subject")
+    db.add(PersonUnavailability(
+        event_id=reset_event.id,
+        person_id=reset_person.id,
+        starts_at=datetime(2026, 8, 1, 11),
+        ends_at=datetime(2026, 8, 1, 12),
+    ))
+    db.commit()
+
+    reset = client.post("/api/v1/data/factory-reset", json={"confirmation": "RESET"})
+
+    assert reset.status_code == 200
+    assert db.query(PersonUnavailability).count() == 0

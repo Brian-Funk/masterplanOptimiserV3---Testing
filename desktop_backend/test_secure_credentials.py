@@ -1,11 +1,14 @@
 """Regression tests for desktop secure credential storage."""
 
+import pytest
+
 from app.core.google_credentials import (
     get_connection_token_data,
     persist_refreshed_connection_tokens,
     store_connection_token_secrets,
 )
 from app.core.secure_credentials import (
+    SecureCredentialStoreUnavailable,
     google_access_token_key,
     google_oauth_client_secret_key,
     google_refresh_token_key,
@@ -39,30 +42,29 @@ def test_mp_backend_save_stores_secret_only_in_secure_store(
     assert payload["secret_available"] is True
     db.refresh(event)
     assert event.mp_backend_url == "https://mp.example.test"
-    assert event.mp_backend_secret is None
+    assert "mp_backend_secret" not in event.__table__.columns
     assert (
         secure_credential_store.values[mp_backend_secret_key(event.id)]
         == "publish-secret-value"
     )
 
 
-def test_legacy_mp_backend_secret_migrates_and_clears_db(
+def test_missing_secure_mp_backend_secret_requires_reconnection(
     db,
     client,
     secure_credential_store,
 ):
     event = create_test_event(db)
     event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "legacy-secret"
     db.commit()
 
     response = client.get(f"/api/v1/mp-backend/?event_id={event.id}")
 
     assert response.status_code == 200
-    assert response.json()["configured"] is True
-    assert secure_credential_store.values[mp_backend_secret_key(event.id)] == "legacy-secret"
-    db.refresh(event)
-    assert event.mp_backend_secret is None
+    assert response.json()["configured"] is False
+    assert response.json()["server_url"] == "https://mp.example.test"
+    assert response.json()["secret_available"] is False
+    assert mp_backend_secret_key(event.id) not in secure_credential_store.values
 
 
 def test_mp_backend_disconnect_deletes_secure_secret(db, client, secure_credential_store):
@@ -77,17 +79,15 @@ def test_mp_backend_disconnect_deletes_secure_secret(db, client, secure_credenti
     assert mp_backend_secret_key(event.id) not in secure_credential_store.values
     db.refresh(event)
     assert event.mp_backend_url is None
-    assert event.mp_backend_secret is None
 
 
-def test_secure_store_unavailable_blocks_secret_migration_without_clearing_legacy(
+def test_secure_store_unavailable_blocks_connection_without_database_fallback(
     db,
     client,
     secure_credential_store,
 ):
     event = create_test_event(db)
     event.mp_backend_url = "https://mp.example.test"
-    event.mp_backend_secret = "legacy-secret"
     db.commit()
     secure_credential_store.is_available = False
 
@@ -95,7 +95,7 @@ def test_secure_store_unavailable_blocks_secret_migration_without_clearing_legac
 
     assert response.status_code == 503
     db.refresh(event)
-    assert event.mp_backend_secret == "legacy-secret"
+    assert event.mp_backend_url == "https://mp.example.test"
 
 
 def test_google_oauth_client_secret_is_stored_in_secure_store(
@@ -155,7 +155,7 @@ def test_google_connection_secrets_are_split_from_token_metadata(
     assert connection.token_data["refresh_token_ref"] == google_refresh_token_key(connection.id)
 
 
-def test_legacy_google_token_data_migrates_lazily(db, secure_credential_store):
+def test_legacy_google_token_data_requires_reconnection(db, secure_credential_store):
     connection = GoogleCalendarConnection(
         account_email="user@example.test",
         token_data={
@@ -170,18 +170,19 @@ def test_legacy_google_token_data_migrates_lazily(db, secure_credential_store):
     db.commit()
     db.refresh(connection)
 
-    hydrated = get_connection_token_data(db, connection)
+    with pytest.raises(
+        SecureCredentialStoreUnavailable,
+        match="Retired database-stored Google credentials are unsupported",
+    ):
+        get_connection_token_data(db, connection)
 
-    assert hydrated["access_token"] == "legacy-access"
-    assert hydrated["refresh_token"] == "legacy-refresh"
-    assert hydrated["client_secret"] == "legacy-client-secret"
-    assert secure_credential_store.values[google_access_token_key(connection.id)] == "legacy-access"
-    assert secure_credential_store.values[google_refresh_token_key(connection.id)] == "legacy-refresh"
-    assert secure_credential_store.values[google_oauth_client_secret_key()] == "legacy-client-secret"
+    assert google_access_token_key(connection.id) not in secure_credential_store.values
+    assert google_refresh_token_key(connection.id) not in secure_credential_store.values
+    assert google_oauth_client_secret_key() not in secure_credential_store.values
     db.refresh(connection)
-    assert "access_token" not in connection.token_data
-    assert "refresh_token" not in connection.token_data
-    assert "client_secret" not in connection.token_data
+    assert connection.token_data["access_token"] == "legacy-access"
+    assert connection.token_data["refresh_token"] == "legacy-refresh"
+    assert connection.token_data["client_secret"] == "legacy-client-secret"
 
 
 def test_google_oauth_callback_stores_tokens_in_secure_store(

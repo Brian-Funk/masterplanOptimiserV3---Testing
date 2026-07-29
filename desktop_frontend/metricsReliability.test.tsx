@@ -33,21 +33,21 @@ const people = [
     last_name: "Able",
     email: "alice@example.test",
     max_hours_per_day: 2.5,
-    global_data: { capabilities: ["driver"] },
+    capabilities: ["driver"],
   },
   {
     id: 2,
     first_name: "Bob",
     last_name: "Baker",
     email: "bob@example.test",
-    global_data: { capabilities: ["driver"] },
+    capabilities: ["driver"],
   },
   {
     id: 3,
     first_name: "Clara",
     last_name: "Calm",
     email: "clara@example.test",
-    global_data: { capabilities: [] },
+    capabilities: [],
   },
 ] as any[];
 
@@ -1526,7 +1526,7 @@ function buildFatigueThresholdSchedule() {
     first_name: person.first_name,
     last_name: person.last_name,
     email: person.email,
-    capabilities: person.global_data.capabilities,
+    capabilities: person.capabilities,
     max_hours_per_day: person.max_hours_per_day,
   }));
 }

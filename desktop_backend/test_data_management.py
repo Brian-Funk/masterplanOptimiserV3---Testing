@@ -17,7 +17,7 @@ from desktop_backend.conftest import (
 def valid_import_payload():
     """Return a compact valid project export for preview and import tests."""
     return {
-        "version": 1,
+        "version": 2,
         "type": "project",
         "exported_at": "2026-05-20T10:00:00",
         "global_data": {

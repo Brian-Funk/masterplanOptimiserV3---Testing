@@ -43,6 +43,7 @@ def test_mp_backend_save_stores_secret_only_in_secure_store(
     db.refresh(event)
     assert event.mp_backend_url == "https://mp.example.test"
     assert "mp_backend_secret" not in event.__table__.columns
+    assert not hasattr(event, "mp_backend_secret")
     assert (
         secure_credential_store.values[mp_backend_secret_key(event.id)]
         == "publish-secret-value"
@@ -65,6 +66,8 @@ def test_missing_secure_mp_backend_secret_requires_reconnection(
     assert response.json()["server_url"] == "https://mp.example.test"
     assert response.json()["secret_available"] is False
     assert mp_backend_secret_key(event.id) not in secure_credential_store.values
+    db.refresh(event)
+    assert not hasattr(event, "mp_backend_secret")
 
 
 def test_mp_backend_disconnect_deletes_secure_secret(db, client, secure_credential_store):
@@ -79,15 +82,17 @@ def test_mp_backend_disconnect_deletes_secure_secret(db, client, secure_credenti
     assert mp_backend_secret_key(event.id) not in secure_credential_store.values
     db.refresh(event)
     assert event.mp_backend_url is None
+    assert not hasattr(event, "mp_backend_secret")
 
 
-def test_secure_store_unavailable_blocks_connection_without_database_fallback(
+def test_secure_store_unavailable_blocks_connection_use_without_deleting_secret(
     db,
     client,
     secure_credential_store,
 ):
     event = create_test_event(db)
     event.mp_backend_url = "https://mp.example.test"
+    secure_credential_store.values[mp_backend_secret_key(event.id)] = "secure-secret"
     db.commit()
     secure_credential_store.is_available = False
 
@@ -96,6 +101,7 @@ def test_secure_store_unavailable_blocks_connection_without_database_fallback(
     assert response.status_code == 503
     db.refresh(event)
     assert event.mp_backend_url == "https://mp.example.test"
+    assert secure_credential_store.values[mp_backend_secret_key(event.id)] == "secure-secret"
 
 
 def test_google_oauth_client_secret_is_stored_in_secure_store(
@@ -183,6 +189,7 @@ def test_legacy_google_token_data_requires_reconnection(db, secure_credential_st
     assert connection.token_data["access_token"] == "legacy-access"
     assert connection.token_data["refresh_token"] == "legacy-refresh"
     assert connection.token_data["client_secret"] == "legacy-client-secret"
+    assert secure_credential_store.values == {}
 
 
 def test_google_oauth_callback_stores_tokens_in_secure_store(

@@ -19,19 +19,12 @@ from sqlalchemy.pool import StaticPool
 # ── Add desktop backend + compute/src to sys.path ──
 _THIS_DIR = Path(__file__).resolve().parent
 _ROOT = _THIS_DIR.parent
-_DESKTOP_BACKEND = (
-    _ROOT.parent.parent
-    / "MasterplanOptimiserV3 - App"
-    / "masterplanOptimiserV3 - App"
-    / "backend"
-)
-_COMPUTE_SRC = (
-    _ROOT.parent.parent
-    / "MasterplanOptimiserV3 - App"
-    / "masterplanOptimiserV3 - App"
-    / "compute"
-    / "src"
-)
+_APP_ROOT = Path(os.environ.get(
+    "MP_OPT_APP_ROOT",
+    _ROOT.parent.parent / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
+))
+_DESKTOP_BACKEND = _APP_ROOT / "backend"
+_COMPUTE_SRC = _APP_ROOT / "compute" / "src"
 for p in (_DESKTOP_BACKEND, _COMPUTE_SRC):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))

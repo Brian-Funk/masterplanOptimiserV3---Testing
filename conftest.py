@@ -18,8 +18,8 @@ from pathlib import Path
 _THIS_DIR = Path(__file__).resolve().parent
 _EYP_ROOT = _THIS_DIR.parent.parent  # …/EYP/
 
-SERVER_BACKEND = _EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server" / "backend"
-DESKTOP_BACKEND = _EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App" / "backend"
+SERVER_BACKEND = Path(os.environ.get("MP_OPT_SERVER_ROOT", _EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server")) / "backend"
+DESKTOP_BACKEND = Path(os.environ.get("MP_OPT_APP_ROOT", _EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App")) / "backend"
 
 # Set env vars BEFORE any app code is imported
 os.environ.setdefault("ENVIRONMENT", "development")

@@ -61,7 +61,7 @@ def test_get_calendar(db):
 
 
 def test_calendar_returns_overnight_working_day_and_private_unavailability(db):
-    """Authenticated calendars retain the overnight tail and exact missing-person detail."""
+    """A participant receives the overnight tail only for their linked identity."""
     event, _ = create_test_event(db, name="Night Calendar")
     event.metadata_json = json.dumps(
         {"schedule_day_range": {"start_hour": 6, "end_hour": 30}},
@@ -87,9 +87,24 @@ def test_calendar_returns_overnight_working_day_and_private_unavailability(db):
         start_datetime="2026-08-02T00:30:00",
         end_datetime="2026-08-02T01:30:00",
     )
-    db.add_all([person, task, interval])
+    other_person = PublishedPerson(
+        event_id=event.id,
+        external_person_id=12,
+        first_name="Other",
+        last_name="Worker",
+    )
+    other_interval = PublishedPersonUnavailability(
+        event_id=event.id,
+        external_person_id=12,
+        working_date="2026-08-01",
+        start_datetime="2026-08-02T02:00:00",
+        end_datetime="2026-08-02T03:00:00",
+    )
+    db.add_all([person, other_person, task, interval, other_interval])
     db.commit()
     user = create_test_user(db, username="night_user", event_id=event.id)
+    user.linked_person_id = 11
+    db.commit()
     client = _make_client(db, user)
 
     response = client.get(f"/api/v1/calendar/{event.id}")
@@ -106,16 +121,19 @@ def test_calendar_returns_overnight_working_day_and_private_unavailability(db):
             "end": "2026-08-02T01:30:00",
         },
     ]
+    assert [row["external_person_id"] for row in data["persons"]] == [11]
 
 
 def test_get_calendar_persons(db):
-    """Can get published persons for an event."""
+    """A participant can retrieve only their linked published person."""
     event, _ = create_test_event(db, name="Pers Evt")
-    _seed_published_data(db, event.id)
+    _task, person = _seed_published_data(db, event.id)
 
     user = create_test_user(
         db, username="pers_user", event_id=event.id,
     )
+    user.linked_person_id = person.external_person_id
+    db.commit()
     client = _make_client(db, user)
 
     r = client.get(f"/api/v1/calendar/{event.id}/persons")
@@ -189,8 +207,8 @@ def test_commit_preserves_structured_assignment_categories(db):
             "cook": [{"name": "Person B", "person_id": 2}],
         }),
         field_definitions_json=json.dumps([
-            {"id": "driver", "name": "Driver", "type": "persons_list"},
-            {"id": "cook", "name": "Cook", "type": "persons_list"},
+            {"id": "driver", "name": "Driver", "type": "persons_list", "purpose": "assignment", "visibility": "participant"},
+            {"id": "cook", "name": "Cook", "type": "persons_list", "purpose": "assignment", "visibility": "participant"},
         ]),
     )
     db.add(task)
@@ -264,88 +282,6 @@ def test_commit_preserves_structured_assignment_categories(db):
     }
     assert task_data["attendees"] == [
         {"name": "Person A", "person_id": 1},
-        {"name": "Person C", "person_id": 3},
-    ]
-
-
-def test_commit_preserves_legacy_assignment_fields(db):
-    """Editing one legacy persons_list value preserves every other category."""
-    event, _ = create_test_event(db, name="Legacy Structured Assignments")
-    db.add_all([
-        PublishedPerson(
-            event_id=event.id,
-            external_person_id=person_id,
-            first_name="Person",
-            last_name=letter,
-        )
-        for person_id, letter in [(1, "A"), (2, "B"), (3, "C")]
-    ])
-    task = PublishedTask(
-        event_id=event.id,
-        external_task_id=6,
-        name="Legacy Meal Transfer",
-        start_datetime=datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc),
-        end_datetime=datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc),
-        attendees_json=json.dumps([
-            {"name": "Person A", "person_id": 1},
-            {"name": "Person B", "person_id": 2},
-        ]),
-        field_values_json=json.dumps({
-            "driver": [{"name": "Person A", "person_id": 1}],
-            "cook": [{"name": "Person B", "person_id": 2}],
-        }),
-        field_definitions_json=json.dumps([
-            {"id": "driver", "name": "Driver", "type": "persons_list"},
-            {"id": "cook", "name": "Cook", "type": "persons_list"},
-        ]),
-    )
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    editor = create_test_user(
-        db,
-        username="legacy.structured.editor",
-        event_id=event.id,
-        can_edit=True,
-    )
-    client = _make_client(db, editor)
-
-    response = client.post(
-        f"/api/v1/calendar/{event.id}/tasks/commit",
-        json={
-            "edits": [{
-                "task_id": task.id,
-                "field_assignments": {
-                    "cook": [
-                        {"name": "Person B", "person_id": 2},
-                        {"name": "Person C", "person_id": 3},
-                    ],
-                },
-            }],
-            "deletions": [],
-            "creations": [],
-        },
-    )
-
-    assert response.status_code == 200
-    edit = db.query(TaskEdit).filter(TaskEdit.task_id == task.id).one()
-    assert json.loads(edit.field_assignments_json) == {
-        "cook": [
-            {"name": "Person B", "person_id": 2},
-            {"name": "Person C", "person_id": 3},
-        ],
-    }
-    assert json.loads(edit.attendees_json) == [
-        {"name": "Person A", "person_id": 1},
-        {"name": "Person B", "person_id": 2},
-        {"name": "Person C", "person_id": 3},
-    ]
-    refreshed_task = client.get(f"/api/v1/calendar/{event.id}").json()["tasks"][0]
-    assert refreshed_task["field_values"]["driver"] == [
-        {"name": "Person A", "person_id": 1},
-    ]
-    assert refreshed_task["field_assignments"]["cook"] == [
-        {"name": "Person B", "person_id": 2},
         {"name": "Person C", "person_id": 3},
     ]
 

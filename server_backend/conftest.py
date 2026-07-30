@@ -5,6 +5,7 @@ Overrides the FastAPI app's database to use SQLite in-memory,
 provides pre-authenticated TestClient fixtures for each role.
 """
 import hashlib
+import os
 import secrets
 import sys
 from datetime import datetime, timedelta, timezone
@@ -19,12 +20,10 @@ from sqlalchemy.pool import StaticPool
 # ── Add server backend to sys.path ──
 _THIS_DIR = Path(__file__).resolve().parent
 _ROOT = _THIS_DIR.parent
-_SERVER_BACKEND = (
-    _ROOT.parent.parent
-    / "MasterplanOptimiserV3 - Server"
-    / "MasterplanOptimiserV3---Server"
-    / "backend"
-)
+_SERVER_BACKEND = Path(os.environ.get(
+    "MP_OPT_SERVER_ROOT",
+    _ROOT.parent.parent / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
+)) / "backend"
 if str(_SERVER_BACKEND) not in sys.path:
     sys.path.insert(0, str(_SERVER_BACKEND))
 

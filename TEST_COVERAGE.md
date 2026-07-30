@@ -483,3 +483,25 @@ FastAPI desktop backend behaviour, data management, optimisation normalisation, 
 - `test_optimization.py` - 4 tests for optimisation and job endpoints
 - `test_publish_state.py` - 6 tests for persistent publish state, per-day failures, clearing, event deletion, and missing-event rejection
 - `test_unicode_and_identifier_validation.py` - 3 tests for Unicode names and strict machine-name validation
+
+---
+
+## Phase 3 retention integration contract
+
+`server_backend/test_phase3_retention_contract.py` independently exercises the
+exact sibling Server and App sources selected through `MP_OPT_SERVER_ROOT` and
+`MP_OPT_APP_ROOT`:
+
+- one signed-workflow trigger at the exact grace boundary;
+- no trigger immediately before the boundary;
+- idempotent replay after restart/repeated cycles;
+- no automatic root decision, access revocation or Desktop-report bypass;
+- compatibility between the Server `delete_event` work order and the Desktop's
+  transactional deletion outbox; and
+- an explicit distinction between automated database expiry and
+  controller-attested recovery-package/evidence retention.
+
+The Server and Desktop Vitest configurations honour the same environment
+variables before falling back to the normal sibling-repository layout. This
+prevents isolated exact-SHA validation from silently importing a different
+mutable checkout.

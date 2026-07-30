@@ -2,14 +2,16 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
 
-const DESKTOP_WEB = path.resolve(
-  __dirname,
-  "..",
-  "..",
-  "MasterplanOptimiserV3 - App",
-  "masterplanOptimiserV3 - App",
-  "web",
-);
+const DESKTOP_WEB = process.env.MP_OPT_APP_ROOT
+  ? path.resolve(process.env.MP_OPT_APP_ROOT, "web")
+  : path.resolve(
+      __dirname,
+      "..",
+      "..",
+      "MasterplanOptimiserV3 - App",
+      "masterplanOptimiserV3 - App",
+      "web",
+    );
 
 export default defineConfig({
   resolve: {

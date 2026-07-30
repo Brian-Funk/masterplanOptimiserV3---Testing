@@ -239,11 +239,11 @@ describe("GeneralScheduleTab publishing", () => {
     render(<GeneralScheduleTab selectedEvent={selectedEvent} />);
 
     await user.click(await screen.findByRole("button", { name: "Add schedule item" }));
-    expect(screen.getByRole("textbox", { name: "Schedule item title" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Public schedule item title" })).toBeInTheDocument();
     expect(screen.getByLabelText("Start time")).toHaveValue("10:00");
     expect(screen.getByLabelText("End time")).toHaveValue("11:00");
 
-    await user.type(screen.getByRole("textbox", { name: "Schedule item title" }), "Workshop");
+    await user.type(screen.getByRole("textbox", { name: "Public schedule item title" }), "Workshop");
     await user.click(screen.getByRole("button", { name: "Save new schedule item" }));
 
     await waitFor(() => expect(mocks.createElement).toHaveBeenCalledWith(

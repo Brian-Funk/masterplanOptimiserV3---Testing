@@ -38,12 +38,18 @@ class FakeMpBackendResponse:
             "edits_cleared": 0,
         }
 
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
 
 class FakeAsyncClient:
     """Capture outbound publish payloads without calling an external server."""
 
     captured_payloads = []
     supports_scoped_publish = True
+    policy_version = 7
+    policy_sha256 = "a" * 64
 
     def __init__(self, *args, **kwargs):
         pass
@@ -54,7 +60,18 @@ class FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def get(self, url, headers):
+    async def get(self, url, headers=None):
+        if url.endswith("/api/v1/governance/public"):
+            return FakeMpBackendResponse({
+                "configured": True,
+                "version": self.policy_version,
+                "content_sha256": self.policy_sha256,
+                "permitted_data": {
+                    "purpose": "Operational event scheduling",
+                    "allowed": ["names", "event roles"],
+                    "unsupported": ["health", "unrelated private information"],
+                },
+            })
         return FakeMpBackendResponse({
             "status": "ok",
             "event_name": "Publish Event",
@@ -65,6 +82,27 @@ class FakeAsyncClient:
     async def post(self, url, headers, json):
         self.captured_payloads.append(json)
         return FakeMpBackendResponse(json)
+
+
+def acknowledge_current_policy(db, event_id):
+    """Seed the exact pseudonymous Desktop acknowledgement required to publish."""
+    mp_backend_module._set_setting(
+        db,
+        mp_backend_module._policy_ack_key(event_id),
+        json.dumps({
+            "policy_version": 7,
+            "policy_sha256": "a" * 64,
+            "operator_subject": "b" * 64,
+            "acknowledged_at": "2026-07-30T12:00:00+00:00",
+        }),
+    )
+    db.commit()
+
+
+def configure_mp_backend(event, secure_credential_store):
+    """Configure the URL and secure publish secret through the Phase 1 boundary."""
+    event.mp_backend_url = "https://mp.example.test"
+    secure_credential_store.values[mp_backend_secret_key(event.id)] = "secret"
 
 
 def test_public_schedule_fingerprint_matches_browser_number_serialisation():
@@ -148,22 +186,17 @@ def create_publish_task(db, event_id, task_type_id, title, day):
     return task
 
 
-def configure_publish_event(event, secure_credential_store):
-    """Configure publishing through the current secure-store-only contract."""
-    event.mp_backend_url = "https://mp.example.test"
-    secure_credential_store.values[mp_backend_secret_key(event.id)] = "secret"
-
-
 def test_mp_backend_publish_filters_tasks_to_requested_day(
     db, client, monkeypatch, secure_credential_store
 ):
     """Publishing one day sends only that day's tasks to MP-Backend."""
     event = create_test_event(db, name="Publish Event")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     task_type = create_test_task_type(db)
     create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
     create_publish_task(db, event.id, task_type.id, "Session Task", "2026-08-02")
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     FakeAsyncClient.captured_payloads = []
     FakeAsyncClient.supports_scoped_publish = True
@@ -174,12 +207,99 @@ def test_mp_backend_publish_filters_tasks_to_requested_day(
         json={"dates": ["2026-08-01"]},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json()["tasks_created"] == 1
     payload = FakeAsyncClient.captured_payloads[0]
+    assert payload["contract_version"] == "2026-07-30"
     assert payload["publish_scope"] == "dates"
     assert payload["dates"] == ["2026-08-01"]
     assert [task["name"] for task in payload["tasks"]] == ["Arrival Task"]
+
+
+def test_mp_backend_publish_requires_exact_current_policy_acknowledgement(
+    db, client, monkeypatch, secure_credential_store
+):
+    """Publishing fails closed before data crosses the wire without exact consent."""
+    event = create_test_event(db, name="Policy-gated publish")
+    configure_mp_backend(event, secure_credential_store)
+    task_type = create_test_task_type(db)
+    create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
+    db.commit()
+
+    FakeAsyncClient.captured_payloads = []
+    monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.post(f"/api/v1/mp-backend/publish/{event.id}", json={})
+
+    assert response.status_code == 428
+    assert response.json()["detail"]["code"] == "desktop_data_policy_acknowledgement_required"
+    assert FakeAsyncClient.captured_payloads == []
+
+
+def test_mp_backend_policy_supersession_invalidates_local_acknowledgement(
+    db, client, monkeypatch, secure_credential_store
+):
+    """A newly published Server digest invalidates the previous local identity."""
+    event = create_test_event(db, name="Superseded policy")
+    configure_mp_backend(event, secure_credential_store)
+    task_type = create_test_task_type(db)
+    create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
+    db.commit()
+    acknowledge_current_policy(db, event.id)
+
+    monkeypatch.setattr(FakeAsyncClient, "policy_version", 8)
+    monkeypatch.setattr(FakeAsyncClient, "policy_sha256", "c" * 64)
+    FakeAsyncClient.captured_payloads = []
+    monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.post(f"/api/v1/mp-backend/publish/{event.id}", json={})
+
+    assert response.status_code == 428
+    detail = response.json()["detail"]
+    assert detail["policy_version"] == 8
+    assert detail["policy_sha256"] == "c" * 64
+    assert FakeAsyncClient.captured_payloads == []
+
+
+def test_mp_backend_publish_blocks_unreviewed_legacy_template_field(
+    db, client, monkeypatch, secure_credential_store
+):
+    """Legacy free-form fields remain local until an operator classifies them."""
+    event = create_test_event(db, name="Legacy classification")
+    configure_mp_backend(event, secure_credential_store)
+    task_type = create_test_task_type(db)
+    template = TaskTemplate(
+        machine_name="legacy_notes",
+        name="Legacy notes",
+        task_type_id=task_type.id,
+        fields=[{"id": "notes", "name": "Notes", "type": "text"}],
+    )
+    db.add(template)
+    db.flush()
+    task = Task(
+        event_id=event.id,
+        task_type_id=task_type.id,
+        task_template_id=template.id,
+        title="Legacy task",
+        constraints={"field_values": {"notes": "private note"}},
+        optimised={"start_time": 600, "end_time": 660, "location": None},
+        final={"start_time": 600, "end_time": 660, "location": None},
+        additional={"date": "2026-08-01"},
+        is_floating=False,
+        is_transfer=False,
+    )
+    db.add(task)
+    db.commit()
+    acknowledge_current_policy(db, event.id)
+
+    FakeAsyncClient.captured_payloads = []
+    monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.post(f"/api/v1/mp-backend/publish/{event.id}", json={})
+
+    assert response.status_code == 409
+    assert "reviewed" in response.json()["detail"]
+    assert FakeAsyncClient.captured_payloads == []
 
 
 def test_mp_backend_publish_without_dates_sends_all_tasks(
@@ -187,11 +307,12 @@ def test_mp_backend_publish_without_dates_sends_all_tasks(
 ):
     """Publishing without a day subset preserves the existing all-event behaviour."""
     event = create_test_event(db, name="Publish Event")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     task_type = create_test_task_type(db)
     create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
     create_publish_task(db, event.id, task_type.id, "Session Task", "2026-08-02")
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     FakeAsyncClient.captured_payloads = []
     FakeAsyncClient.supports_scoped_publish = True
@@ -219,7 +340,7 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
 ):
     """Published group allocations are availability-aware and retain the overnight tail."""
     event = create_test_event(db, name="Overnight Publish")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     event.meta_data = {"schedule_day_range": {"startHour": 6, "endHour": 30}}
     task_type = create_test_task_type(db)
     available = Person(
@@ -262,6 +383,9 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
                 "name": "Crew",
                 "type": "persons_list",
                 "category": "conditions",
+                "purpose": "assignment",
+                "visibility": "participant",
+                "classification_reviewed": True,
             },
         ],
     )
@@ -297,6 +421,7 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
         ],
     )
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     FakeAsyncClient.captured_payloads = []
     monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
@@ -309,7 +434,7 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
     published_task = payload["tasks"][0]
     assert published_task["start"] == "2026-08-02T01:00:00"
     assert published_task["end"] == "2026-08-02T02:00:00"
-    assert published_task["additional"]["working_date"] == "2026-08-01"
+    assert "additional" not in published_task
     assert [person["person_id"] for person in published_task["attendees"]] == [available.id]
     assert [person["person_id"] for person in published_task["field_assignments"]["crew"]] == [available.id]
     assert any(
@@ -323,8 +448,9 @@ def test_mp_backend_publish_excludes_unavailable_group_member_and_emits_overnigh
 def test_mp_backend_publish_rejects_invalid_date(client, db, secure_credential_store):
     """Invalid day ids are rejected before any external publish call is made."""
     event = create_test_event(db, name="Publish Event")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     response = client.post(
         f"/api/v1/mp-backend/publish/{event.id}",
@@ -343,10 +469,11 @@ def test_mp_backend_publish_refuses_selected_day_on_server_without_scoped_suppor
 ):
     """Older servers must not receive a one-day payload they would full-replace."""
     event = create_test_event(db, name="Publish Event")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     task_type = create_test_task_type(db)
     create_publish_task(db, event.id, task_type.id, "Arrival Task", "2026-08-01")
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     FakeAsyncClient.captured_payloads = []
     FakeAsyncClient.supports_scoped_publish = False
@@ -370,7 +497,7 @@ def test_public_schedule_selected_day_publish_filters_items_and_clears_failure(
 ):
     """A successful selected-day retry clears only that day's stale failure."""
     event = create_test_event(db, name="Public Programme")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     view = ScheduleView(event_id=event.id, name="Public", sort_order=0)
     location = Location(
         event_id=event.id,
@@ -426,6 +553,7 @@ def test_public_schedule_selected_day_publish_filters_items_and_clears_failure(
     )
     db.add(state)
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     FakeAsyncClient.captured_payloads = []
     monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)
@@ -458,7 +586,7 @@ def test_public_schedule_all_days_publish_sends_full_programme(
 ):
     """Publishing all days sends one full replacement payload."""
     event = create_test_event(db, name="Public Programme")
-    configure_publish_event(event, secure_credential_store)
+    configure_mp_backend(event, secure_credential_store)
     view = ScheduleView(event_id=event.id, name="Public", sort_order=0)
     db.add(view)
     db.flush()
@@ -495,6 +623,7 @@ def test_public_schedule_all_days_publish_sends_full_programme(
     )
     db.add(state)
     db.commit()
+    acknowledge_current_policy(db, event.id)
 
     FakeAsyncClient.captured_payloads = []
     monkeypatch.setattr(mp_backend_module.httpx, "AsyncClient", FakeAsyncClient)

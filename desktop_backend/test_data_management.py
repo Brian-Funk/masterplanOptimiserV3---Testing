@@ -502,7 +502,7 @@ def test_import_preview_summarises_valid_project_payload(client):
 
     assert r.status_code == 200
     data = r.json()
-    assert data["isValid"] is True
+    assert data["isValid"] is True, data["errors"]
     assert data["errors"] == []
     assert data["summary"]["projectName"] == "Import Event"
     assert data["summary"]["dateRange"] == "01.08.2026 - 03.08.2026"
@@ -582,7 +582,7 @@ def test_import_preview_warns_for_sparse_but_usable_payload(client):
 
     assert r.status_code == 200
     data = r.json()
-    assert data["isValid"] is True
+    assert data["isValid"] is True, data["errors"]
     assert "No people included" in issue_titles(data)
     assert "No tasks included" in issue_titles(data)
 

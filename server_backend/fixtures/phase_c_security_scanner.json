@@ -1,0 +1,21 @@
+{
+  "format": "masterplan-security-scanner-fixture-v1",
+  "safe": [
+    {"id":"safe-source","scope":"source","path":"docs/public.md","content":"Providers and retention are declared by each controller deployment."},
+    {"id":"safe-evidence","scope":"evidence","path":"evidence/records/0001.json","content":"{\"subject_ref\":\"sha256:synthetic-subject\",\"statement\":\"synthetic purge recorded\"}"}
+  ],
+  "unsafe": [
+    {"id":"private-key","scope":"source","path":"src/config.txt","content":"-----BEGIN PRIVATE KEY-----\nsynthetic-only\n-----END PRIVATE KEY-----","expected":"secret-like private key"},
+    {"id":"age-identity","scope":"source","path":"src/config.txt","content":"AGE-SECRET-KEY-1SYNTHETICIDENTITY000000","expected":"secret-like age identity"},
+    {"id":"github-token","scope":"source","path":"src/config.txt","content":"github_pat_SYNTHETIC000000000000000000000","expected":"secret-like GitHub token"},
+    {"id":"aws-key","scope":"source","path":"src/config.txt","content":"AKIAXXXXXXXXXXXXXXXX","expected":"secret-like AWS access key"},
+    {"id":"service-token","scope":"source","path":"src/config.txt","content":"xoxb-synthetic-token-value-0000000000","expected":"secret-like service token"},
+    {"id":"secret-assignment","scope":"source","path":"src/config.txt","content":"SECRET_KEY=synthetic-value-that-is-too-long","expected":"secret-like secret assignment"},
+    {"id":"personal-email","scope":"evidence","path":"evidence/records/0002.json","content":"{\"email\":\"person@example.org\"}","expected":"evidence contains email address"},
+    {"id":"personal-field","scope":"evidence","path":"trust/controller.json","content":"{\"full_name\":\"Synthetic Person\"}","expected":"evidence contains forbidden evidence field"},
+    {"id":"environment","scope":"source","path":"deploy/.env","content":"","expected":"forbidden name"},
+    {"id":"archive","scope":"artefact","path":"dist/export.zip","content":"","expected":"forbidden .zip artefact"},
+    {"id":"database","scope":"artefact","path":"dist/live.sqlite3","content":"","expected":"forbidden .sqlite3 artefact"},
+    {"id":"history-note","scope":"history","path":"notes/controller-review.md","content":"","expected":"forbidden historical path"}
+  ]
+}

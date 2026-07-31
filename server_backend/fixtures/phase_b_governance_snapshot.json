@@ -1,0 +1,54 @@
+{
+  "format": "masterplan-phase-b-governance-snapshot-v1",
+  "controller_profiles": {
+    "organisation": {
+      "controller_type": "organisation",
+      "controller_legal_name": "Synthetic Organisation Controller",
+      "controller_postal_address": "Controller Street 1, 8000 Zurich",
+      "controller_country": "CH",
+      "privacy_contact_email": "privacy@synthetic-controller.invalid",
+      "privacy_contact_phone": "+41 00 000 00 00",
+      "dpo_contact": "dpo@synthetic-controller.invalid",
+      "eu_representative": "Synthetic EU representative",
+      "swiss_representative": "Synthetic Swiss representative"
+    },
+    "individual": {
+      "controller_type": "individual",
+      "controller_legal_name": "Synthetic Individual Controller",
+      "controller_postal_address": "Private Controller Street 2, 3000 Bern",
+      "controller_country": "CH",
+      "privacy_contact_email": "privacy@synthetic-individual.invalid",
+      "privacy_contact_phone": null,
+      "dpo_contact": null,
+      "eu_representative": null,
+      "swiss_representative": null
+    }
+  },
+  "feature_order": [
+    "smtp_enabled",
+    "push_enabled",
+    "offline_schedule_enabled",
+    "public_schedule_enabled",
+    "external_support_enabled",
+    "ha_enabled"
+  ],
+  "feature_disclosures": {
+    "activation_email": "Activation and recovery messages may be delivered through the configured SMTP provider. Messages contain the recipient address, access purpose, event name where applicable, one-time link and expiry.",
+    "manual_activation": "Activation links are distributed manually; this instance does not use SMTP for delivery.",
+    "push_notifications": "Participants may enable Web Push. The push service receives the minimum delivery metadata; notifications can be withdrawn in account settings.",
+    "offline_schedule": "Participants may explicitly store their own limited schedule in IndexedDB on this device until the displayed expiry or manual removal. Shared-device users should remove it after use.",
+    "public_schedule": "An organiser may create expiring public schedule links. Possession of a bearer link grants the access described on that link until it expires or is revoked.",
+    "external_support": "Authorised external support may access only the data and period recorded by the controller.",
+    "high_availability": "Encrypted recovery and high-availability copies follow the controller-selected retention policy.",
+    "dns_only_routing": "The DNS and health-selection provider may process DNS and health-check metadata. Application HTTPS is established directly with the selected server; the supported setup does not terminate application TLS at that provider."
+  },
+  "sections": {
+    "privacy": "Privacy notice",
+    "legal": "Controller and legal notice",
+    "terms": "Instance terms",
+    "data-policy": "Permitted-data policy",
+    "retention": "Retention and deletion",
+    "rights": "Your data-protection rights",
+    "processors": "Processors and service providers"
+  }
+}

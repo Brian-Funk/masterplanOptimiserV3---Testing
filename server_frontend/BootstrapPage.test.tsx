@@ -149,6 +149,7 @@ describe("BootstrapPage", () => {
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
+    await user.click(screen.getByRole("checkbox"));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );
@@ -196,6 +197,7 @@ describe("BootstrapPage", () => {
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
+    await user.click(screen.getByRole("checkbox"));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );
@@ -231,6 +233,7 @@ describe("BootstrapPage", () => {
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
+    await user.click(screen.getByRole("checkbox"));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );
@@ -265,6 +268,7 @@ describe("BootstrapPage", () => {
 
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/bootstrap code/i), "b".repeat(32));
+    await user.click(screen.getByRole("checkbox"));
     await user.click(
       screen.getByRole("button", { name: /register root passkey/i }),
     );

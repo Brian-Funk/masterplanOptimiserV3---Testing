@@ -17,9 +17,9 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ isAuthenticated: mockIsAuthenticated }),
 }));
 
-// Mock fetch
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+const mockApiFetch = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api", () => ({ apiFetch: mockApiFetch }));
+vi.mock("@/lib/reauth", () => ({ withReauth: (operation: () => unknown) => operation() }));
 
 // CSRF cookie
 Object.defineProperty(document, "cookie", {
@@ -38,7 +38,8 @@ vi.mock("lucide-react", () => ({
 import { DeleteMyDataLink } from "@/components/DeleteMyDataLink";
 
 beforeEach(() => {
-  mockFetch.mockReset();
+  mockApiFetch.mockReset();
+  mockApiFetch.mockResolvedValue({ ok: false, json: async () => ({}) });
   mockIsAuthenticated = true;
 });
 
@@ -97,7 +98,19 @@ describe("DeleteMyDataLink", () => {
   });
 
   it("submits deletion request successfully", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true });
+    mockApiFetch.mockImplementation((_url, init) =>
+      init?.method === "POST"
+        ? Promise.resolve({
+            ok: true,
+            json: async () => ({
+              request_id: "request-1",
+              state: "submitted",
+              submitted_at: "2026-07-31T10:00:00Z",
+              normal_response_due_at: "2026-08-30T10:00:00Z",
+            }),
+          })
+        : Promise.resolve({ ok: false, json: async () => ({}) }),
+    );
 
     const user = userEvent.setup();
     render(<DeleteMyDataLink />);
@@ -106,17 +119,17 @@ describe("DeleteMyDataLink", () => {
     await user.click(screen.getByText("Submit Deletion Request"));
 
     await waitFor(() => {
-      // After success, the whole component should disappear (submitted state)
-      expect(screen.queryByText("Delete my data")).toBeNull();
-      expect(screen.queryByText("Request Data Deletion")).toBeNull();
+      expect(screen.getByText("Deletion request")).toBeInTheDocument();
+      expect(screen.getByTestId("deletion-request-id")).toHaveTextContent("request-1");
     });
   });
 
   it("shows error on failed submission", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ detail: "Already requested" }),
-    });
+    mockApiFetch.mockImplementation((_url, init) => Promise.resolve(
+      init?.method === "POST"
+        ? { ok: false, json: async () => ({ detail: "Already requested" }) }
+        : { ok: false, json: async () => ({}) },
+    ));
 
     const user = userEvent.setup();
     render(<DeleteMyDataLink />);
@@ -130,12 +143,11 @@ describe("DeleteMyDataLink", () => {
   });
 
   it("shows generic error when response has no detail", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => {
-        throw new Error("no json");
-      },
-    });
+    mockApiFetch.mockImplementation((_url, init) => Promise.resolve(
+      init?.method === "POST"
+        ? { ok: false, json: async () => { throw new Error("no json"); } }
+        : { ok: false, json: async () => ({}) },
+    ));
 
     const user = userEvent.setup();
     render(<DeleteMyDataLink />);
@@ -151,7 +163,11 @@ describe("DeleteMyDataLink", () => {
   });
 
   it("shows network error message", async () => {
-    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+    mockApiFetch.mockImplementation((_url, init) =>
+      init?.method === "POST"
+        ? Promise.reject(new Error("Network error"))
+        : Promise.resolve({ ok: false, json: async () => ({}) }),
+    );
 
     const user = userEvent.setup();
     render(<DeleteMyDataLink />);
@@ -168,7 +184,11 @@ describe("DeleteMyDataLink", () => {
 
   it("shows loading state during submission", async () => {
     // Never-resolving fetch to keep loading state
-    mockFetch.mockImplementation(() => new Promise(() => {}));
+    mockApiFetch.mockImplementation((_url, init) =>
+      init?.method === "POST"
+        ? new Promise(() => {})
+        : Promise.resolve({ ok: false, json: async () => ({}) }),
+    );
 
     const user = userEvent.setup();
     render(<DeleteMyDataLink />);
@@ -187,7 +207,8 @@ describe("DeleteMyDataLink", () => {
 
     await user.click(screen.getByText("Delete my data"));
 
-    expect(screen.getByText(/permanently anonymised/)).toBeInTheDocument();
     expect(screen.getByText(/administrator is notified/)).toBeInTheDocument();
+    expect(screen.getByText(/matching desktop person record are deleted/)).toBeInTheDocument();
+    expect(screen.getByText(/cannot be completed while any required deletion remains unresolved/)).toBeInTheDocument();
   });
 });

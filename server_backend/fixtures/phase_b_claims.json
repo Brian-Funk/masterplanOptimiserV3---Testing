@@ -1,0 +1,22 @@
+{
+  "format": "masterplan-phase-b-claim-fixtures-v1",
+  "safe": [
+    "Masterplan provides tested technical controls that support controller readiness.",
+    "The software does not certify a deployment or decide whether a legal assessment is correct.",
+    "A signed receipt can show who signed a statement; it cannot prove that no physical copy exists.",
+    "The controller must confirm provider roles, countries, agreements and retention.",
+    "No analytics, advertising or cross-site tracking is enabled by the supported release.",
+    "Application HTTPS is established directly with the selected server in the supported DNS-only architecture."
+  ],
+  "unsafe": [
+    {"rule_id": "CLAIM-COMPLIANCE-STATUS", "text": "This deployment is GDPR compliant."},
+    {"rule_id": "CLAIM-CERTIFICATION", "text": "The platform is GDPR-certified."},
+    {"rule_id": "CLAIM-DELETION-PROOF", "text": "The receipt proves all copies are deleted."},
+    {"rule_id": "CLAIM-NO-PERSONAL-DATA", "text": "This hosted service does not collect personal data."},
+    {"rule_id": "CLAIM-DATA-RESIDENCY", "text": "All personal data is stored only in Switzerland."},
+    {"rule_id": "CLAIM-DATA-NEVER-LEAVES", "text": "Personal data never leaves the server."},
+    {"rule_id": "CLAIM-PROVIDER-ABSOLUTE", "text": "Cloudflare cannot access request metadata."},
+    {"rule_id": "CLAIM-ANONYMITY", "text": "Operational logs are fully anonymous."},
+    {"rule_id": "CLAIM-AUTOMATIC-LAWFUL-BASIS", "text": "The software establishes a lawful basis."}
+  ]
+}

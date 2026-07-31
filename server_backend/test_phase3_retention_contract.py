@@ -10,6 +10,13 @@ from app.models.server_setting import ServerSetting
 from server_backend.conftest import create_test_event
 
 
+EYP_ROOT = Path(__file__).resolve().parents[3]
+APP_ROOT = Path(os.environ.get(
+    "MP_OPT_APP_ROOT",
+    EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
+))
+
+
 def _unsigned_case_stub(db, event, **kwargs):
     """Stand in only for filesystem signing in the external SQLite suite."""
 
@@ -54,9 +61,8 @@ def test_grace_boundary_is_exact_restart_safe_and_requires_root_decision(
 
 
 def test_server_work_order_contract_matches_transactional_desktop_event_erasure():
-    app_root = Path(os.environ["MP_OPT_APP_ROOT"])
     desktop_service = (
-        app_root / "backend/app/core/desktop_deletion.py"
+        APP_ROOT / "backend/app/core/desktop_deletion.py"
     ).read_text(encoding="utf-8")
     server_service = Path(retention.__file__).resolve().parents[1] / "core/deletion_cases.py"
     server_contract = server_service.read_text(encoding="utf-8")

@@ -34,7 +34,11 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/lib/offlineCalendarCache", () => ({
+  OfflineCalendarStorageError: class OfflineCalendarStorageError extends Error {},
+  clearOfflineCalendarCacheForUser: vi.fn(),
   getOfflineCalendarPayload: mockGetOfflineCalendarPayload,
+  offlineCalendarStorageEnabled: () => true,
+  setOfflineCalendarStorageEnabled: vi.fn(),
   storeOfflineCalendarPayload: mockStoreOfflineCalendarPayload,
 }));
 
@@ -278,6 +282,7 @@ describe("CalendarPage offline cache", () => {
         42,
         1,
         cachedCalendar,
+        expect.any(String),
         expect.any(String),
       );
     });

@@ -25,13 +25,9 @@ vi.mock("@/components/DeleteMyDataLink", () => ({
 import { Footer } from "@/components/Footer";
 
 describe("Footer", () => {
-  it("renders copyright notice with current year", () => {
+  it("identifies the deployment as a self-hosted instance", () => {
     render(<Footer />);
-    const year = new Date().getFullYear().toString();
-    expect(screen.getByText(new RegExp(year))).toBeInTheDocument();
-    expect(
-      screen.getByText(/Brian Funk\. All rights reserved/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Masterplan Optimiser self-hosted instance")).toBeInTheDocument();
   });
 
   it("renders About link", () => {

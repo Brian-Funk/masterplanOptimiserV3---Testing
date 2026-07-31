@@ -3,14 +3,20 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearOfflineCalendarCacheForUser,
   getOfflineCalendarPayload,
+  setOfflineCalendarStorageEnabled,
   storeOfflineCalendarPayload,
 } from "@/lib/offlineCalendarCache";
 
 const payload = {
   event_id: 7,
   event_name: "Cached Event",
-  tasks: [{ id: 1, name: "Opening" }],
+  tasks: [],
+  persons: [],
 };
+
+const cachedAt = "2026-05-21T09:30:00.000Z";
+const validUntil = "2026-08-21T09:30:00.000Z";
+const validationTime = new Date("2026-05-21T09:30:00.000Z");
 
 const records = new Map<string, Record<string, unknown>>();
 
@@ -23,6 +29,10 @@ function installMemoryIndexedDb(): void {
     createObjectStore: () => {
       storeCreated = true;
       return {};
+    },
+    deleteObjectStore: () => {
+      storeCreated = false;
+      records.clear();
     },
     transaction: () => {
       const transaction: Record<string, unknown> = {};
@@ -39,37 +49,26 @@ function installMemoryIndexedDb(): void {
           queueMicrotask(() => {
             request.result = records.get(key);
             (request.onsuccess as (() => void) | undefined)?.();
+            queueMicrotask(() =>
+              (transaction.oncomplete as (() => void) | undefined)?.(),
+            );
           });
           return request;
         },
-        openCursor: () => {
+        getAll: () => {
           const request: Record<string, unknown> = {};
-          const keys = Array.from(records.keys());
-          let index = 0;
-          const emit = () => {
-            queueMicrotask(() => {
-              if (index >= keys.length) {
-                request.result = null;
-                (request.onsuccess as (() => void) | undefined)?.();
-                queueMicrotask(() =>
-                  (transaction.oncomplete as (() => void) | undefined)?.(),
-                );
-                return;
-              }
-              const key = keys[index];
-              request.result = {
-                value: records.get(key),
-                delete: () => records.delete(key),
-                continue: () => {
-                  index += 1;
-                  emit();
-                },
-              };
-              (request.onsuccess as (() => void) | undefined)?.();
-            });
-          };
-          emit();
+          queueMicrotask(() => {
+            request.result = Array.from(records.values());
+            (request.onsuccess as (() => void) | undefined)?.();
+            queueMicrotask(() =>
+              (transaction.oncomplete as (() => void) | undefined)?.(),
+            );
+          });
           return request;
+        },
+        delete: (key: string) => {
+          records.delete(key);
+          return {};
         },
       };
       transaction.objectStore = () => store;
@@ -107,6 +106,8 @@ beforeEach(() => {
   records.clear();
   localStorage.clear();
   installMemoryIndexedDb();
+  setOfflineCalendarStorageEnabled(12, true);
+  setOfflineCalendarStorageEnabled(13, true);
 });
 
 describe("offlineCalendarCache", () => {
@@ -115,45 +116,56 @@ describe("offlineCalendarCache", () => {
       12,
       7,
       payload,
-      "2026-05-21T09:30:00.000Z",
+      cachedAt,
+      validUntil,
+      validationTime,
     );
 
-    await expect(getOfflineCalendarPayload<typeof payload>(12, 7)).resolves.toMatchObject({
+    await expect(getOfflineCalendarPayload<typeof payload>(12, 7, validationTime)).resolves.toMatchObject({
       user_id: 12,
       event_id: 7,
-      cached_at: "2026-05-21T09:30:00.000Z",
+      cached_at: cachedAt,
+      valid_until: validUntil,
       payload,
     });
-    expect(localStorage.length).toBe(0);
+    expect(localStorage.length).toBe(2);
   });
 
   it("does not return another user or event's payload", async () => {
-    await storeOfflineCalendarPayload(12, 7, payload);
+    await storeOfflineCalendarPayload(12, 7, payload, cachedAt, validUntil, validationTime);
 
-    await expect(getOfflineCalendarPayload(13, 7)).resolves.toBeNull();
-    await expect(getOfflineCalendarPayload(12, 8)).resolves.toBeNull();
+    await expect(getOfflineCalendarPayload(13, 7, validationTime)).resolves.toBeNull();
+    await expect(getOfflineCalendarPayload(12, 8, validationTime)).resolves.toBeNull();
   });
 
   it("clears cached payloads for only the selected user", async () => {
-    await storeOfflineCalendarPayload(12, 7, payload);
-    await storeOfflineCalendarPayload(13, 7, { event_name: "Other" });
+    await storeOfflineCalendarPayload(12, 7, payload, cachedAt, validUntil, validationTime);
+    await storeOfflineCalendarPayload(
+      13,
+      7,
+      { ...payload, event_name: "Other" },
+      cachedAt,
+      validUntil,
+      validationTime,
+    );
 
     await clearOfflineCalendarCacheForUser(12);
 
-    await expect(getOfflineCalendarPayload(12, 7)).resolves.toBeNull();
-    await expect(getOfflineCalendarPayload(13, 7)).resolves.toMatchObject({
-      payload: { event_name: "Other" },
+    await expect(getOfflineCalendarPayload(12, 7, validationTime)).resolves.toBeNull();
+    await expect(getOfflineCalendarPayload(13, 7, validationTime)).resolves.toMatchObject({
+      payload: { event_id: 7, event_name: "Other", tasks: [], persons: [] },
     });
   });
 
   it("does not fall back to localStorage when IndexedDB is unavailable", async () => {
     disableIndexedDb();
 
-    await expect(storeOfflineCalendarPayload(12, 7, payload)).resolves.toMatchObject({
-      user_id: 12,
-      event_id: 7,
+    await expect(
+      storeOfflineCalendarPayload(12, 7, payload, cachedAt, validUntil, validationTime),
+    ).rejects.toMatchObject({ code: "storage_unavailable" });
+    await expect(getOfflineCalendarPayload(12, 7, validationTime)).rejects.toMatchObject({
+      code: "storage_unavailable",
     });
-    await expect(getOfflineCalendarPayload(12, 7)).resolves.toBeNull();
-    expect(localStorage.length).toBe(0);
+    expect(localStorage.length).toBe(2);
   });
 });

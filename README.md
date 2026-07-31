@@ -2,6 +2,10 @@
 
 Standalone automated test suite for the MasterplanOptimiserV3 stack.
 
+This repository is licensed under `AGPL-3.0-only`. See [LICENSE](LICENSE),
+[third-party notices](THIRD-PARTY-NOTICES.md), [branding](BRANDING.md) and the
+[contribution-provenance record](COPYRIGHT-AND-CONTRIBUTION-PROVENANCE.md).
+
 ## Structure
 
 ```

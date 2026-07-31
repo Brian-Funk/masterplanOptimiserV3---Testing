@@ -2,6 +2,7 @@
 name = "masterplan-testing"
 version = "0.1.0"
 description = "Automated test suite for MasterplanOptimiserV3"
+license = "AGPL-3.0-only"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

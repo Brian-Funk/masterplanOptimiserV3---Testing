@@ -2,8 +2,10 @@
   "name": "masterplan-optimiser-testing",
   "version": "1.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
+    "check:licences": "node scripts/check-third-party-notices.mjs",
     "test:server": "vitest run --config vitest.config.server.ts",
     "test:desktop": "vitest run --config vitest.config.desktop.ts",
     "test:all": "npm run test:server && npm run test:desktop",

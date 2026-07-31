@@ -2,14 +2,16 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
 
-const SERVER_WEB = path.resolve(
-  __dirname,
-  "..",
-  "..",
-  "MasterplanOptimiserV3 - Server",
-  "MasterplanOptimiserV3---Server",
-  "web",
-);
+const SERVER_WEB = process.env.MP_OPT_SERVER_ROOT
+  ? path.resolve(process.env.MP_OPT_SERVER_ROOT, "web")
+  : path.resolve(
+      __dirname,
+      "..",
+      "..",
+      "MasterplanOptimiserV3 - Server",
+      "MasterplanOptimiserV3---Server",
+      "web",
+    );
 
 export default defineConfig({
   resolve: {

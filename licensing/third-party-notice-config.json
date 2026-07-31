@@ -1,0 +1,19 @@
+{
+  "project": "Masterplan Optimiser independent test suite",
+  "python_locks": [],
+  "npm_locks": [
+    "package-lock.json"
+  ],
+  "python_metadata": "licensing/python-licenses.json",
+  "python_license_overrides": {},
+  "output_files": [
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "other_components": [
+    {
+      "name": "Python test dependencies",
+      "license": "Package-specific licences",
+      "evidence": "Development-only requirements.txt; not distributed in Server or Desktop releases"
+    }
+  ]
+}

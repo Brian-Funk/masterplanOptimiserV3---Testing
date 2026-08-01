@@ -1,0 +1,88 @@
+{
+  "format": "masterplan-phase-f-exact-stack-plan-v1",
+  "roadmap_version": "2026-07-31.1",
+  "requirements": ["INTEGRATION-11", "ASSURE-011", "TEST-003", "TEST-008", "DESKTOP-LEGACY"],
+  "repositories": {
+    "app": {"environment": "MP_OPT_APP_ROOT", "default_relative": "MasterplanOptimiserV3 - App/masterplanOptimiserV3 - App"},
+    "server": {"environment": "MP_OPT_SERVER_ROOT", "default_relative": "MasterplanOptimiserV3 - Server/MasterplanOptimiserV3---Server"},
+    "testing": {"environment": "MP_OPT_TESTING_ROOT", "default_relative": "MasterplanOptimiserV3 - Testing/masterplanOptimiserV3---Testing"},
+    "docs": {"environment": "MP_OPT_DOCS_ROOT", "default_relative": "MasterplanOptimiserV3 - Docs/mp-opt-info"}
+  },
+  "lanes": [
+    {
+      "id": "one-time-conversion",
+      "repository": "app",
+      "cwd": "backend",
+      "command": ["python", "-m", "pytest", "tests/test_phase_f_one_off_conversion.py", "-q"],
+      "covers": ["converter dry run", "conversion", "semantic comparison", "rollback", "no Desktop integration"]
+    },
+    {
+      "id": "current-stack-flow",
+      "repository": "server",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "server_backend/test_phase_f_exact_stack.py", "-q"],
+      "covers": ["event creation", "current-format Desktop publication", "participant access", "organiser access", "deletion receipt"]
+    },
+    {
+      "id": "bootstrap-governance",
+      "repository": "server",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "server_backend/test_passkey_challenges.py::test_bootstrap_requires_operator_secret_and_discoverable_passkey", "server_backend/test_governance.py::test_draft_is_private_and_publication_is_immutable", "-q"],
+      "covers": ["bootstrap", "controller configuration", "governance publication"]
+    },
+    {
+      "id": "schedule-offline-deletion",
+      "repository": "server",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "server_backend/test_public_schedule_links.py::test_root_creates_hashed_one_time_public_schedule_link", "server_backend/test_calendar.py::test_offline_calendar_contract_is_participant_only_even_for_editor", "server_backend/test_deletion_evidence_workflow.py::test_subject_purge_deletes_account_after_verified_desktop_report", "server_backend/test_deletion_evidence_workflow.py::test_event_purge_deletes_complete_non_root_event_scope", "-q"],
+      "covers": ["optional public schedule", "offline lifecycle", "account deletion", "event deletion"]
+    },
+    {
+      "id": "synthetic-backup-restore",
+      "repository": "server",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "server_backend/test_management_cli.py::test_snapshots_are_encrypted_versioned_and_hash_verified", "server_backend/test_management_cli.py::test_restore_verifies_then_creates_verified_rollback_before_apply", "-q"],
+      "covers": ["encrypted synthetic backup", "verified restore", "rollback snapshot"]
+    },
+    {
+      "id": "evidence-export-import-summary",
+      "repository": "server",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "server_backend/test_evidence_git.py::test_valid_chain_renders_deterministic_accessible_markdown_and_html_and_exports_exact_tools", "server_backend/test_evidence_git.py::test_portable_bundle_is_deterministic_self_contained_and_offline_verifiable", "server_backend/test_evidence_bundle.py::test_bundle_round_trip_and_idempotent_git_staging", "-q"],
+      "covers": ["evidence export", "offline verification", "temporary evidence Git import", "human-readable summary"]
+    },
+    {
+      "id": "cross-repository-contracts",
+      "repository": "testing",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "server_backend/test_phase_f_exact_stack_contract.py", "-q"],
+      "covers": ["exact plan", "cross-repository boundaries"]
+    },
+    {
+      "id": "external-converter-hardening",
+      "repository": "testing",
+      "cwd": ".",
+      "command": ["python", "-m", "pytest", "desktop_backend/test_converter_hardening.py", "-q"],
+      "covers": ["converter hardening", "copy-only source handling", "atomic output rollback"]
+    },
+    {
+      "id": "public-docs",
+      "repository": "docs",
+      "cwd": ".",
+      "command": ["npm", "run", "build"],
+      "covers": ["public documentation checks", "licences", "claims", "links", "production build"]
+    }
+  ],
+  "exclusions": [
+    "converter integration into Desktop",
+    "runtime legacy compatibility",
+    "automatic startup migration",
+    "converter UI or user-facing import flow",
+    "dual-read or dual-write behaviour",
+    "legacy-data synchronisation",
+    "ongoing legacy-format support",
+    "protected data or live backups",
+    "production infrastructure",
+    "deployment or release"
+  ]
+}

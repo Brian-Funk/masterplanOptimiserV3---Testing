@@ -5,17 +5,11 @@ import os
 from pathlib import Path
 
 from server_backend.conftest import _make_client, create_test_user
+from repo_roots import app_root, server_root
 
 
-EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
+SERVER_ROOT = server_root()
+APP_ROOT = app_root()
 
 CONFIRMATION = {
     "authorised_to_configure": True,

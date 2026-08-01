@@ -16,13 +16,10 @@ from sqlalchemy import create_engine, event as sa_event, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
+from repo_roots import app_root
+
 # ── Add desktop backend + compute/src to sys.path ──
-_THIS_DIR = Path(__file__).resolve().parent
-_ROOT = _THIS_DIR.parent
-_APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT",
-    _ROOT.parent.parent / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
+_APP_ROOT = app_root()
 _DESKTOP_BACKEND = _APP_ROOT / "backend"
 _COMPUTE_SRC = _APP_ROOT / "compute" / "src"
 for p in (_DESKTOP_BACKEND, _COMPUTE_SRC):

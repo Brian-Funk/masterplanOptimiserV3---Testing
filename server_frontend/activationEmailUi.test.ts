@@ -4,13 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { deriveActivationCampaignSummary } from "@/lib/activationCampaign";
+import { resolveServerRoot } from "../test_support/repoRoots";
 
-const serverRoot = path.resolve(
-  __dirname,
-  "../../..",
-  "MasterplanOptimiserV3 - Server",
-  "MasterplanOptimiserV3---Server",
-);
+const serverRoot = resolveServerRoot();
 
 function adminPageSource(): string {
   return readFileSync(

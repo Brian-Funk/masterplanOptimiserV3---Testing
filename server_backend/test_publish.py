@@ -1,4 +1,6 @@
 """Tests for the desktop-to-server publish endpoint."""
+import uuid
+
 from fastapi.testclient import TestClient
 
 from server_backend.conftest import _raw_client, create_test_event, create_test_user
@@ -14,15 +16,31 @@ from app.models.published import (
 
 def _publish_client(bearer_token: str) -> TestClient:
     """Create a client with Bearer token auth and no session cookies."""
-    return _raw_client(
+    client = _raw_client(
         headers={
             "Authorization": f"Bearer {bearer_token}",
             "Content-Type": "application/json",
         },
     )
+    original_post = client.post
+
+    def contract_post(url, *args, **kwargs):
+        if url == "/api/v1/publish/publish" and isinstance(kwargs.get("json"), dict):
+            kwargs["json"] = {"contract_version": "2026-07-30", **kwargs["json"]}
+        return original_post(url, *args, **kwargs)
+
+    client.post = contract_post
+    return client
+
+
+def _subject_id(person_id: int) -> str:
+    """Return a stable version-4 evidence UUID for one test person."""
+
+    return str(uuid.UUID(int=person_id, version=4))
 
 
 _MINIMAL_PAYLOAD = {
+    "contract_version": "2026-07-30",
     "tasks": [
         {
             "id": 1,
@@ -33,7 +51,12 @@ _MINIMAL_PAYLOAD = {
         },
     ],
     "persons": [
-        {"id": 1, "first_name": "John", "last_name": "Doe"},
+        {
+            "id": 1,
+            "first_name": "John",
+            "last_name": "Doe",
+            "evidence_subject_id": _subject_id(1),
+        },
     ],
 }
 
@@ -45,16 +68,16 @@ def _task_payload(task_id: int, name: str, day: str) -> dict:
         "start": f"{day}T09:00:00+00:00",
         "end": f"{day}T10:00:00+00:00",
         "attendees": [],
-        "additional": {"date": day},
     }
 
 
 def _publish_days(client: TestClient, days: list[tuple[int, str, str]], **extra):
     payload = {
+        "contract_version": "2026-07-30",
         "tasks": [_task_payload(task_id, name, day) for task_id, name, day in days],
         "persons": [
-            {"id": 1, "first_name": "Anna", "last_name": "Muller"},
-            {"id": 2, "first_name": "Ben", "last_name": "Rossi"},
+            {"id": 1, "first_name": "Anna", "last_name": "Muller", "evidence_subject_id": _subject_id(1)},
+            {"id": 2, "first_name": "Ben", "last_name": "Rossi", "evidence_subject_id": _subject_id(2)},
         ],
         **extra,
     }
@@ -134,7 +157,7 @@ def test_publish_adds_range_and_unavailability_without_touching_registered_users
             },
         ],
         "persons": [
-            {"id": 1, "first_name": "Jane", "last_name": "Doe"},
+            {"id": 1, "first_name": "Jane", "last_name": "Doe", "evidence_subject_id": _subject_id(1)},
         ],
         "unavailabilities": [
             {
@@ -317,8 +340,8 @@ def test_publish_date_scope_upserts_people_without_deleting_existing_people(db):
         "dates": ["2026-08-02"],
         "tasks": [_task_payload(2, "Session Task", "2026-08-02")],
         "persons": [
-            {"id": 2, "first_name": "Benjamin", "last_name": "Rossi"},
-            {"id": 3, "first_name": "Clara", "last_name": "Smith"},
+            {"id": 2, "first_name": "Benjamin", "last_name": "Rossi", "evidence_subject_id": _subject_id(2)},
+            {"id": 3, "first_name": "Clara", "last_name": "Smith", "evidence_subject_id": _subject_id(3)},
         ],
     }
     r = client.post("/api/v1/publish/publish", json=payload)
@@ -393,12 +416,9 @@ def test_publish_updates_event_metadata(db):
     assert event.status == "published"
 
 
-def test_publish_ignores_legacy_logo_theme_payload(db):
-    """Legacy desktop logo colour payloads are accepted but not applied."""
-    event, secret = create_test_event(db, name="Theme Evt")
-    event.logo_color_1 = "#111111"
-    event.logo_color_2 = "#222222"
-    db.commit()
+def test_publish_rejects_retired_logo_theme_payload(db):
+    """The clean-slate contract has no compatibility path for retired theme data."""
+    _event, secret = create_test_event(db, name="Theme Evt")
     client = _publish_client(secret)
 
     payload = {
@@ -410,11 +430,7 @@ def test_publish_ignores_legacy_logo_theme_payload(db):
     }
 
     r = client.post("/api/v1/publish/publish", json=payload)
-    assert r.status_code == 200
-
-    db.refresh(event)
-    assert event.logo_color_1 == "#111111"
-    assert event.logo_color_2 == "#222222"
+    assert r.status_code == 422
 
 
 def test_general_schedule_publish_uses_explicit_schedule_views(db):

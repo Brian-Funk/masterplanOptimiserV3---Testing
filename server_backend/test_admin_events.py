@@ -85,24 +85,25 @@ def test_delete_event_requires_reauth(db, admin_client):
     assert r.status_code == 403
 
 
-def test_delete_event_cascade(db, reauth_admin_client):
-    """Deleting an event cascades to users and published data."""
+def test_delete_event_requires_accountable_case(db, reauth_admin_client):
+    """Direct event deletion cannot bypass the accountable erasure workflow."""
     event, _ = create_test_event(db, name="Cascade Evt")
     user = create_test_user(db, username="evt_user", event_id=event.id)
     user_id = user.id
 
     r = reauth_admin_client.delete(f"/api/v1/admin/events/{event.id}")
-    assert r.status_code == 200
-    assert "deleted" in r.json()["message"].lower()
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "DELETION_CASE_REQUIRED"
 
     # Verify user is gone
     from app.models.user import User
     remaining = db.query(User).filter(User.id == user_id).first()
-    assert remaining is None
+    assert remaining is not None
+    assert remaining.event_id == event.id
 
 
-def test_delete_event_preserves_privileged_accounts(db, reauth_admin_client):
-    """Event deletion cannot indirectly delete an admin or issuer account."""
+def test_rejected_direct_delete_preserves_privileged_accounts(db, reauth_admin_client):
+    """A rejected shortcut leaves privileged accounts and sessions unchanged."""
     event, _ = create_test_event(db, name="Privileged Event")
     privileged = create_test_user(
         db,
@@ -114,11 +115,12 @@ def test_delete_event_preserves_privileged_accounts(db, reauth_admin_client):
 
     response = reauth_admin_client.delete(f"/api/v1/admin/events/{event.id}")
 
-    assert response.status_code == 200
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "DELETION_CASE_REQUIRED"
     db.refresh(privileged)
-    assert privileged.event_id is None
+    assert privileged.event_id == event.id
     assert privileged.is_issuer is True
-    assert privileged_client.get("/api/v1/auth/me").status_code == 401
+    assert privileged_client.get("/api/v1/auth/me").status_code == 200
 
 
 def test_delete_event_not_found(db, reauth_admin_client):

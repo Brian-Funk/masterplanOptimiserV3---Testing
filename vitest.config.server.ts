@@ -1,17 +1,9 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vitest/config";
 import path from "path";
+import { resolveServerRoot } from "./test_support/repoRoots";
 
-const SERVER_WEB = process.env.MP_OPT_SERVER_ROOT
-  ? path.resolve(process.env.MP_OPT_SERVER_ROOT, "web")
-  : path.resolve(
-      __dirname,
-      "..",
-      "..",
-      "MasterplanOptimiserV3 - Server",
-      "MasterplanOptimiserV3---Server",
-      "web",
-    );
+const SERVER_WEB = path.join(resolveServerRoot(), "web");
 
 export default defineConfig({
   resolve: {

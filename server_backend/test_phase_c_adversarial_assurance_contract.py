@@ -7,12 +7,19 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import pytest
+
+from repo_roots import app_root, optional_docs_root, server_root
 
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get("MP_OPT_SERVER_ROOT", EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server"))
-APP_ROOT = Path(os.environ.get("MP_OPT_APP_ROOT", EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App"))
-DOCS_ROOT = Path(os.environ.get("MP_OPT_DOCS_ROOT", EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info"))
+SERVER_ROOT = server_root()
+APP_ROOT = app_root()
+DOCS_ROOT = optional_docs_root()
+project_site_required = pytest.mark.skipif(
+    DOCS_ROOT is None,
+    reason="project-site contracts require an explicit valid MP_OPT_DOCS_ROOT",
+)
 FIXTURE = Path(__file__).parent / "fixtures" / "phase_c_security_scanner.json"
 if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
@@ -43,6 +50,7 @@ def test_current_app_and_server_publishable_trees_pass_hardened_scanners():
     assert app.returncode == 0, app.stderr
 
 
+@project_site_required
 def test_attack_trees_are_connected_to_mitigations_and_real_docs_pages():
     document = _json(DOCS_ROOT / "src/data/security-attack-trees.json")
     assert document["format"] == "masterplan-attack-trees-v1"
@@ -74,6 +82,7 @@ def test_attack_trees_are_connected_to_mitigations_and_real_docs_pages():
     assert 'role="tree"' in page and "Residual risk:" in page
 
 
+@project_site_required
 def test_scanner_disposition_has_no_unowned_finding_or_exception():
     disposition = _json(DOCS_ROOT / "docs/security/scanner-disposition.json")
     assert disposition["format"] == "masterplan-scanner-disposition-v1"
@@ -84,6 +93,7 @@ def test_scanner_disposition_has_no_unowned_finding_or_exception():
     assert disposition["exceptions"] == []
 
 
+@project_site_required
 def test_docs_dependency_roots_are_remediated_and_backports_are_bounded():
     lock = _json(DOCS_ROOT / "package-lock.json")["packages"]
     assert tuple(map(int, lock["node_modules/next"]["version"].split("."))) >= (16, 2, 11)
@@ -100,6 +110,7 @@ def test_docs_dependency_roots_are_remediated_and_backports_are_bounded():
     assert security_tests.returncode == 0, security_tests.stderr
 
 
+@project_site_required
 def test_docs_diagram_and_link_checker_passes():
     completed = _run(["node", "scripts/check-attack-trees.mjs"], DOCS_ROOT)
     assert completed.returncode == 0, completed.stderr

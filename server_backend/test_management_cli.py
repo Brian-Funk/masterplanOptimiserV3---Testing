@@ -6,16 +6,21 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import pytest
+
+from repo_roots import server_root
+
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="management shell contracts require Linux Bash semantics",
+)
 
 
 def _server_root() -> Path:
     """Return the checked-out server repository used by integration tests."""
 
-    return (
-        Path(__file__).resolve().parents[3]
-        / "MasterplanOptimiserV3 - Server"
-        / "MasterplanOptimiserV3---Server"
-    )
+    return server_root()
 
 
 def _read(relative: str) -> str:
@@ -674,6 +679,11 @@ def test_menu_actions_keep_strict_failure_handling_without_closing_menu(tmp_path
 def test_initial_wizard_can_skip_smtp_without_putting_secrets_in_env(tmp_path: Path):
     """First setup creates protected secret files while SMTP remains optional."""
 
+    management = tmp_path / "deploy" / "management"
+    management.mkdir(parents=True)
+    (management / "instance_key.py").write_bytes(
+        (_server_root() / "deploy" / "management" / "instance_key.py").read_bytes()
+    )
     environment = os.environ.copy()
     environment.update(
         {
@@ -682,6 +692,7 @@ def test_initial_wizard_can_skip_smtp_without_putting_secrets_in_env(tmp_path: P
             "MP_STATE": str(tmp_path / "state"),
             "MP_SNAPSHOTS": str(tmp_path / "snapshots"),
             "MP_TUI": "ansi",
+            "PS1": "",
         }
     )
     command = r"""
@@ -702,20 +713,26 @@ def test_initial_wizard_can_skip_smtp_without_putting_secrets_in_env(tmp_path: P
         }
         ui_confirm() {
             case "$1" in
-                "Database"|"Review configuration") return 0 ;;
+                "Database"|"Permitted data"|"Review configuration"|"Commission instance signing identity") return 0 ;;
                 "Optional activation email"|"Recovery encryption") return 1 ;;
                 *) return 1 ;;
             esac
         }
         mp_guided_initial_configuration
         test -s "$MP_ROOT/.env"
+        test -s "$MP_ROOT/secrets/database_password"
+        test -s "$MP_ROOT/secrets/ip_hmac_key"
         test -s "$MP_ROOT/secrets/secret_key"
         test -s "$MP_ROOT/secrets/vapid_private_key"
         test -s "$MP_ROOT/secrets/root_bootstrap_token"
+        test -s "$MP_ROOT/secrets/evidence_signing_key"
+        test -s "$MP_ROOT/secrets/evidence_signing_key.pub"
         test -e "$MP_ROOT/secrets/smtp_token"
         test ! -s "$MP_ROOT/secrets/smtp_token"
-        ! grep -Eq '^(SECRET_KEY|ROOT_BOOTSTRAP_TOKEN|VAPID_PRIVATE_KEY|SMTP_TOKEN)=' "$MP_ROOT/.env"
+        ! grep -Eq '^(DATABASE_URL|POSTGRES_PASSWORD|SECRET_KEY|IP_HMAC_KEY|ROOT_BOOTSTRAP_TOKEN|VAPID_PRIVATE_KEY|SMTP_TOKEN)=' "$MP_ROOT/.env"
         grep -Fxq 'SMTP_HOST=' "$MP_ROOT/.env"
+        grep -Eq '^MP_INSTANCE_ID=[0-9a-f-]{36}$' "$MP_ROOT/.env"
+        grep -Fxq 'GOVERNANCE_SETUP_ACK_VERSION=2026-07-27' "$MP_ROOT/.env"
         test "$(stat -c '%a' "$MP_ROOT/.env")" = 600
         test "$(stat -c '%a' "$MP_ROOT/secrets/secret_key")" = 600
     """

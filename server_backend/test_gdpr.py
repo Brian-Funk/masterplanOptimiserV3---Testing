@@ -50,22 +50,21 @@ def test_gdpr_export_requires_reauthentication(db, admin_client):
 # ── DELETE /admin/users/{id}/gdpr-delete (anonymise) ──
 
 
-def test_gdpr_anonymise(db, reauth_admin_client):
-    """Admin with reauth can anonymise a user."""
+def test_gdpr_anonymise_server_only_user_is_ready_for_live_purge(db, reauth_admin_client):
+    """A server-only account skips the inapplicable desktop work order."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(db, username="anonme", event_id=event.id)
 
     r = reauth_admin_client.delete(f"/api/v1/admin/users/{user.id}/gdpr-delete")
     assert r.status_code == 200
-    assert "anonymised" in r.json()["message"].lower()
+    assert r.json()["state"] == "ready_for_live_purge"
+    assert "server-only account" in r.json()["message"].lower()
 
     # Verify anonymisation
     from app.models.user import User
-    anon = db.query(User).filter(User.id == user.id).first()
-    assert anon.username == f"deleted_{user.id}"
-    assert anon.display_name == "Deleted User"
-    assert anon.email is None
-    assert anon.is_active is False
+    retained = db.query(User).filter(User.id == user.id).one()
+    assert retained.username == "anonme"
+    assert retained.is_active is False
 
 
 def test_gdpr_anonymise_root_blocked(db, reauth_admin_client):
@@ -88,7 +87,7 @@ def test_user_request_deletion(db):
     """User can request their own deletion."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(db, username="deleteme", event_id=event.id)
-    client = _make_client(db, user)
+    client = _make_client(db, user, reauth=True)
 
     r = client.post("/api/v1/user/request-deletion")
     assert r.status_code == 200
@@ -109,15 +108,15 @@ def test_root_cannot_request_self_deletion(db, root_client):
 # ── DELETE /admin/users/{id}/deletion-request (dismiss) ──
 
 
-def test_dismiss_deletion_request(db, admin_client):
+def test_dismiss_deletion_request(db, reauth_admin_client):
     """Admin can dismiss a pending deletion request."""
     from datetime import datetime, timezone
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(db, username="dismiss_target", event_id=event.id)
-    user.deletion_requested_at = datetime.now(timezone.utc)
-    db.commit()
+    client = _make_client(db, user, reauth=True)
+    client.post("/api/v1/user/request-deletion")
 
-    r = admin_client.delete(f"/api/v1/admin/users/{user.id}/deletion-request")
+    r = reauth_admin_client.delete(f"/api/v1/admin/users/{user.id}/deletion-request")
     assert r.status_code == 200
 
     # Verify flag cleared
@@ -126,10 +125,10 @@ def test_dismiss_deletion_request(db, admin_client):
     assert updated.deletion_requested_at is None
 
 
-def test_dismiss_no_pending_request(db, admin_client):
+def test_dismiss_no_pending_request(db, reauth_admin_client):
     """Dismissing when no request is pending → 409."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(db, username="no_request", event_id=event.id)
 
-    r = admin_client.delete(f"/api/v1/admin/users/{user.id}/deletion-request")
+    r = reauth_admin_client.delete(f"/api/v1/admin/users/{user.id}/deletion-request")
     assert r.status_code == 409

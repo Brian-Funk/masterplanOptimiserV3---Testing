@@ -1,15 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveAppRoot } from "../test_support/repoRoots";
 
-
-const appRoot = process.env.MP_OPT_APP_ROOT || path.resolve(
-  process.cwd(),
-  "..",
-  "..",
-  "MasterplanOptimiserV3 - App",
-  "masterplanOptimiserV3 - App",
-);
+const appRoot = resolveAppRoot();
 
 
 function source(relative: string) {

@@ -9,17 +9,8 @@ import os
 import sys
 from pathlib import Path
 
-# This file lives at:
-#   MasterplanOptimiserV3 - Testing/masterplanOptimiserV3---Testing/conftest.py
-# Sibling repos are at:
-#   MasterplanOptimiserV3 - Server/MasterplanOptimiserV3---Server/backend/
-#   MasterplanOptimiserV3 - App/masterplanOptimiserV3 - App/backend/
-
 _THIS_DIR = Path(__file__).resolve().parent
 _EYP_ROOT = _THIS_DIR.parent.parent  # …/EYP/
-
-SERVER_BACKEND = Path(os.environ.get("MP_OPT_SERVER_ROOT", _EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server")) / "backend"
-DESKTOP_BACKEND = Path(os.environ.get("MP_OPT_APP_ROOT", _EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App")) / "backend"
 
 # Set env vars BEFORE any app code is imported
 os.environ.setdefault("ENVIRONMENT", "development")

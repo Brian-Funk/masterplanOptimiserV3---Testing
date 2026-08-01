@@ -503,4 +503,5 @@ def test_logout_audits_user_before_revoking_session(db):
     assert r.status_code == 200
     entry = db.query(AuditLog).filter(AuditLog.action == "auth.logout").one()
     assert entry.user_id == user.id
-    assert entry.username == user.username
+    assert entry.username is None
+    assert entry.actor_ref == user.evidence_subject_id

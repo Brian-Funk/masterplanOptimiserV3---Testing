@@ -1,14 +1,11 @@
 """Server startup schema policy tests."""
 from pathlib import Path
 
+from repo_roots import server_root
+
 
 def _server_backend_root() -> Path:
-    return (
-        Path(__file__).resolve().parents[3]
-        / "MasterplanOptimiserV3 - Server"
-        / "MasterplanOptimiserV3---Server"
-        / "backend"
-    )
+    return server_root() / "backend"
 
 
 def test_server_startup_has_no_ad_hoc_schema_migrations():

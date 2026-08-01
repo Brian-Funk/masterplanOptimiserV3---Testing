@@ -1,4 +1,7 @@
 node_modules
+.venv/
+.venv-desktop/
+.venv-server/
 __pycache__/
 *.pyc
 .pytest_cache/

@@ -4,18 +4,11 @@
 import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { resolveAppRoot } from "../test_support/repoRoots";
 
 const require = createRequire(import.meta.url);
 const { buildDesktopContentSecurityPolicy } = require(
-  path.resolve(
-    process.cwd(),
-    "..",
-    "..",
-    "MasterplanOptimiserV3 - App",
-    "masterplanOptimiserV3 - App",
-    "desktop",
-    "security-policy.js",
-  ),
+  path.join(resolveAppRoot(), "desktop", "security-policy.js"),
 );
 
 describe("desktop packaged Content Security Policy", () => {

@@ -1,19 +1,9 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolveServerRoot } from "../test_support/repoRoots";
 
-const testDir = path.dirname(fileURLToPath(import.meta.url));
-const serverSrc = path.resolve(
-  testDir,
-  "..",
-  "..",
-  "..",
-  "MasterplanOptimiserV3 - Server",
-  "MasterplanOptimiserV3---Server",
-  "web",
-  "src",
-);
+const serverSrc = path.join(resolveServerRoot(), "web", "src");
 
 function readSource(relativePath: string): string {
   return fs.readFileSync(path.join(serverSrc, relativePath), "utf8");

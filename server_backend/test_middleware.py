@@ -76,6 +76,7 @@ def test_publish_exempt_from_csrf(db):
     )
 
     r = client.post("/api/v1/publish/publish", json={
+        "contract_version": "2026-07-30",
         "tasks": [],
         "persons": [],
     })

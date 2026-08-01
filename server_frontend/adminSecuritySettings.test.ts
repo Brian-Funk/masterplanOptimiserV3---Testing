@@ -4,13 +4,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { resolveServerRoot } from "../test_support/repoRoots";
 
-const serverRoot = path.resolve(
-  __dirname,
-  "../../..",
-  "MasterplanOptimiserV3 - Server",
-  "MasterplanOptimiserV3---Server",
-);
+const serverRoot = resolveServerRoot();
 const adminPagePath = path.join(
   serverRoot,
   "web",

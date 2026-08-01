@@ -7,17 +7,13 @@ import json
 import os
 from pathlib import Path
 
+from repo_roots import app_root, optional_docs_root, server_root
+
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT", EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT", EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-DOCS_ROOT = Path(os.environ.get(
-    "MP_OPT_DOCS_ROOT", EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info",
-))
+APP_ROOT = app_root()
+SERVER_ROOT = server_root()
+DOCS_ROOT = optional_docs_root()
 TESTING_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -72,9 +68,11 @@ def test_phase_f_sources_are_separate_and_documented() -> None:
     server_doc = (SERVER_ROOT / "docs" / "exact-stack-qualification.md").read_text(
         encoding="utf-8"
     )
-    public_doc = (
-        DOCS_ROOT / "src" / "app" / "docs" / "desktop" / "import-export" / "page.tsx"
-    ).read_text(encoding="utf-8")
+    public_doc = None
+    if DOCS_ROOT is not None:
+        public_doc = (
+            DOCS_ROOT / "src" / "app" / "docs" / "desktop" / "import-export" / "page.tsx"
+        ).read_text(encoding="utf-8")
     desktop_core = (APP_ROOT / "backend" / "app" / "core" / "operator_evidence.py").read_text(
         encoding="utf-8"
     )
@@ -86,7 +84,7 @@ def test_phase_f_sources_are_separate_and_documented() -> None:
     assert 'OPERATOR_TOOL_SCOPE = "separate-temporary-one-time-converter"' in converter
     assert "def dry_run(" in converter and "def rollback(" in converter
     assert "contract_version" in server_test and "no_legacy_runtime_fallback" in server_test
-    for document in (server_doc, public_doc):
+    for document in (server_doc, *([public_doc] if public_doc is not None else [])):
         assert "separate" in document
         assert "startup migration" in document
         assert "dual-read" in document

@@ -6,13 +6,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy.orm import Session
 
-_TEST_ROOT = Path(__file__).resolve().parent.parent
-_SERVER_BACKEND = (
-    _TEST_ROOT.parent.parent
-    / "MasterplanOptimiserV3 - Server"
-    / "MasterplanOptimiserV3---Server"
-    / "backend"
-)
+from repo_roots import server_root
+
+_SERVER_BACKEND = server_root() / "backend"
 if str(_SERVER_BACKEND) not in sys.path:
     sys.path.insert(0, str(_SERVER_BACKEND))
 

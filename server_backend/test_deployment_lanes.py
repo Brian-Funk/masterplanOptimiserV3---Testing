@@ -2,25 +2,36 @@
 
 from __future__ import annotations
 
-import stat
+import subprocess
 from pathlib import Path
 
+from repo_roots import server_root
 
-ROOT = (
-    Path(__file__).resolve().parents[3]
-    / "MasterplanOptimiserV3 - Server"
-    / "MasterplanOptimiserV3---Server"
-)
+ROOT = server_root()
 
 
 def text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def assert_repo_executable(path: Path) -> None:
+    """Check the executable bit recorded by Git, including on Windows."""
+
+    relative = path.relative_to(ROOT).as_posix()
+    result = subprocess.run(
+        ["git", "ls-files", "--stage", "--", relative],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.split(maxsplit=1)[0] == "100755"
+
+
 def test_unsigned_lane_is_exact_commit_and_root_policy_gated() -> None:
     supervisor = ROOT / "deploy/test-deployment.sh"
     source = supervisor.read_text(encoding="utf-8")
-    assert supervisor.stat().st_mode & stat.S_IXUSR
+    assert_repo_executable(supervisor)
     assert "require_test_policy" in source
     assert "deployment-policy" in text("deploy/management/common.sh")
     assert "exact 40-character commit" in source
@@ -33,7 +44,7 @@ def test_signed_lane_is_exact_tag_peer_first_and_immutable() -> None:
     supervisor = ROOT / "deploy/signed-deployment.sh"
     source = supervisor.read_text(encoding="utf-8")
     workflow = text(".github/workflows/release.yml")
-    assert supervisor.stat().st_mode & stat.S_IXUSR
+    assert_repo_executable(supervisor)
     assert "validate tag" in source
     assert "MP_SIGNED_PEER=1" in source
     assert "--tag \"$tag\"" in source

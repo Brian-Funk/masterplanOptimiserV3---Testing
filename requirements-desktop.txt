@@ -1,0 +1,3 @@
+# Testing-repository-only Desktop dependencies.
+# The exact App backend and compute dependencies are installed from
+# MP_OPT_APP_ROOT by tools/setup_test_env.py.

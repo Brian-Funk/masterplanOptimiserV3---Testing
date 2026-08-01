@@ -5,8 +5,10 @@ Overrides the FastAPI app's database to use SQLite in-memory,
 provides pre-authenticated TestClient fixtures for each role.
 """
 import hashlib
+import json
 import os
 import secrets
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,13 +19,10 @@ from sqlalchemy import create_engine, event as sa_event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
+from repo_roots import server_root
+
 # ── Add server backend to sys.path ──
-_THIS_DIR = Path(__file__).resolve().parent
-_ROOT = _THIS_DIR.parent
-_SERVER_BACKEND = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    _ROOT.parent.parent / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-)) / "backend"
+_SERVER_BACKEND = server_root() / "backend"
 if str(_SERVER_BACKEND) not in sys.path:
     sys.path.insert(0, str(_SERVER_BACKEND))
 
@@ -36,8 +35,11 @@ from app.models.published import PublishedTask, PublishedPerson, PublishSnapshot
 from app.models.notification import PushSubscription, Announcement, ScheduleChange
 from app.models.audit import AuditLog
 from app.models.server_setting import ServerSetting
+from app.models.governance import DataPolicyAcknowledgement, GovernancePublication, InstanceGovernanceProfile
+from app.models.deletion import DeletionCase
 from app.core.sessions import _hash_token
 from app.core.rate_limit import limiter
+from app.core.config import settings
 
 from fastapi.testclient import TestClient
 
@@ -60,6 +62,46 @@ def _set_sqlite_pragma(dbapi_conn, _connection_record):
 TestingSessionLocal = sessionmaker(
     autocommit=False, autoflush=False, bind=_test_engine,
 )
+
+
+@pytest.fixture(scope="session")
+def evidence_test_key(tmp_path_factory) -> Path:
+    """Create one real Ed25519 installation key for required-evidence tests."""
+
+    key = tmp_path_factory.mktemp("evidence-key") / "instance"
+    subprocess.run(
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)],
+        check=True,
+    )
+    return key
+
+
+@pytest.fixture(autouse=True)
+def _required_evidence_storage(tmp_path, evidence_test_key, monkeypatch):
+    """Give each test an isolated writable required-evidence filesystem."""
+
+    evidence_home = tmp_path / "evidence"
+    public_evidence = evidence_home / "public"
+    public_evidence.mkdir(parents=True)
+    (public_evidence / "management-audit-head.json").write_text(
+        json.dumps(
+            {
+                "format": "mp-opt-management-audit-head-v1",
+                "tail_sha256": "a" * 64,
+                "verified_at": "2026-07-28T00:00:00Z",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "EVIDENCE_MODE", "required")
+    monkeypatch.setattr(settings, "EVIDENCE_HOME", str(evidence_home))
+    monkeypatch.setattr(settings, "EVIDENCE_SIGNING_KEY_PATH", str(evidence_test_key))
+    monkeypatch.setattr(settings, "KEY_SEPARATION_ENFORCED", False)
+    monkeypatch.setattr(settings, "COMPLIANCE_REQUEST_DIR", str(tmp_path / "requests"))
+    monkeypatch.setattr(settings, "COMPLIANCE_RECEIPT_DIR", str(tmp_path / "receipts"))
 
 
 @pytest.fixture(autouse=True)

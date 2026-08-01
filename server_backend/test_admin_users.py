@@ -486,12 +486,13 @@ def test_delete_user_requires_reauth(db, admin_client):
     assert "Re-authentication required" in r.json().get("detail", "")
 
 
-def test_delete_user_with_reauth(db, reauth_admin_client):
-    """Admin with reauth can delete a user."""
+def test_delete_used_user_requires_signed_workflow(db, reauth_admin_client):
+    """Re-authentication cannot bypass the evidence workflow for used accounts."""
     event, _ = create_test_event(db, name="Evt")
     user = create_test_user(db, username="to_delete2", event_id=event.id)
     r = reauth_admin_client.delete(f"/api/v1/admin/users/{user.id}")
-    assert r.status_code == 200
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "SIGNED_DELETION_REQUIRED"
 
 
 def test_delete_root_admin_blocked(db, reauth_admin_client):

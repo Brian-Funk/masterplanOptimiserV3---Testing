@@ -5,14 +5,12 @@ from pathlib import Path
 import subprocess
 import sys
 
+from repo_roots import server_root
+
 
 def _server_root() -> Path:
     """Return the checked-out server repository root used by external tests."""
-    return (
-        Path(__file__).resolve().parents[3]
-        / "MasterplanOptimiserV3 - Server"
-        / "MasterplanOptimiserV3---Server"
-    )
+    return server_root()
 
 
 def test_deploy_provisions_required_root_bootstrap_secret():
@@ -28,11 +26,14 @@ def test_deploy_provisions_required_root_bootstrap_secret():
         'printf "%s" "$ROOT_BOOTSTRAP_TOKEN" > secrets/root_bootstrap_token'
         in deploy_script
     )
-    assert (
-        "chmod 600 secrets/secret_key secrets/vapid_private_key "
-        "secrets/root_bootstrap_token secrets/smtp_token"
-        in deploy_script
-    )
+    assert "chmod 600 secrets/database_password secrets/ip_hmac_key" in deploy_script
+    assert "secrets/secret_key secrets/vapid_private_key" in deploy_script
+    for protected_name in (
+        "secrets/root_bootstrap_token",
+        "secrets/smtp_token",
+        "secrets/evidence_signing_key",
+    ):
+        assert protected_name in deploy_script
 
 
 def test_deploy_preserves_an_empty_bootstrap_secret():
@@ -74,7 +75,7 @@ def test_activation_email_brand_and_qr_assets_are_packaged_predictably():
 
     assert "SMTP_FROM_NAME=Masterplan Access" in example_env
     assert 'smtp_from_name="Masterplan Access"' in management_actions
-    assert "FROM python:3.11-alpine" in dockerfile
+    assert "FROM python:3.14-alpine" in dockerfile
     assert "apk add --no-cache font-dejavu" in dockerfile
     assert "fonts-dejavu-core" not in dockerfile
     assert (

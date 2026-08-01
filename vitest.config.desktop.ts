@@ -1,17 +1,9 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vitest/config";
 import path from "path";
+import { resolveAppRoot } from "./test_support/repoRoots";
 
-const DESKTOP_WEB = process.env.MP_OPT_APP_ROOT
-  ? path.resolve(process.env.MP_OPT_APP_ROOT, "web")
-  : path.resolve(
-      __dirname,
-      "..",
-      "..",
-      "MasterplanOptimiserV3 - App",
-      "masterplanOptimiserV3 - App",
-      "web",
-    );
+const DESKTOP_WEB = path.join(resolveAppRoot(), "web");
 
 export default defineConfig({
   resolve: {

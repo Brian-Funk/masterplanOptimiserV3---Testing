@@ -3,8 +3,8 @@
   "roadmap_version": "2026-08-01.2",
   "requirements": ["INTEGRATION-11", "ASSURE-011", "TEST-003", "TEST-008", "DESKTOP-LEGACY", "KEYSEP-F"],
   "repositories": {
-    "app": {"environment": "MP_OPT_APP_ROOT", "default_relative": "MasterplanOptimiserV3 - App/masterplanOptimiserV3 - App"},
-    "server": {"environment": "MP_OPT_SERVER_ROOT", "default_relative": "MasterplanOptimiserV3 - Server/MasterplanOptimiserV3---Server"},
+    "app": {"environment": "MP_OPT_APP_ROOT", "default_relative": "MasterplanOptimiserV3 - App-Public"},
+    "server": {"environment": "MP_OPT_SERVER_ROOT", "default_relative": "MasterplanOptimiserV3 - Server-Public"},
     "testing": {"environment": "MP_OPT_TESTING_ROOT", "default_relative": "MasterplanOptimiserV3 - Testing/masterplanOptimiserV3---Testing"},
     "docs": {"environment": "MP_OPT_DOCS_ROOT", "default_relative": "MasterplanOptimiserV3 - Docs/mp-opt-info"}
   },

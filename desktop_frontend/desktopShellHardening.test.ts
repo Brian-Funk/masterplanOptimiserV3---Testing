@@ -5,16 +5,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { resolveAppRoot } from "../test_support/repoRoots";
 
 const require = createRequire(import.meta.url);
-const desktopRoot = path.resolve(
-  process.cwd(),
-  "..",
-  "..",
-  "MasterplanOptimiserV3 - App",
-  "masterplanOptimiserV3 - App",
-  "desktop",
-);
+const desktopRoot = path.join(resolveAppRoot(), "desktop");
 const {
   createOwnedProcessRegistry,
   terminateProcessTree,

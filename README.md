@@ -21,10 +21,13 @@ desktop_frontend/   — Phase 4: Desktop (Next.js) frontend component tests
 # One-time setup
 setup.bat           # Windows: creates venv, installs Python + Node deps
 
-# Run Python backend tests
-.venv\Scripts\activate
-pytest server_backend/ -v
-pytest desktop_backend/ -v
+# Select exact source checkouts when discovery would be ambiguous
+set MP_OPT_APP_ROOT=C:\path\to\App-Public
+set MP_OPT_SERVER_ROOT=C:\path\to\Server-Public
+
+# Run Python backend tests in product-isolated environments
+.venv-server\Scripts\python -m pytest server_backend/ -v
+.venv-desktop\Scripts\python -m pytest desktop_backend/ -v
 
 # Run frontend tests
 npx vitest run --config vitest.config.server.ts
@@ -33,7 +36,10 @@ npx vitest run --config vitest.config.desktop.ts
 
 ## How It Works
 
-- Python tests import from sibling project repos via `sys.path` in `conftest.py`
+- Repository roots come from `MP_OPT_APP_ROOT` and `MP_OPT_SERVER_ROOT`, or from
+  unambiguous bounded checkout discovery.
+- Desktop and Server Python tests use separate virtual environments populated
+  from the exact source checkout's committed requirement and constraint files.
 - Frontend tests reference sibling repo source via Vitest path aliases
 - No changes are needed in the App, Server, or Docs repos
 - Backend tests use SQLite in-memory databases for speed

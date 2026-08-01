@@ -4,15 +4,20 @@ from pathlib import Path
 import os
 import stat
 import subprocess
+import pytest
+
+from repo_roots import server_root
+
+
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="server management contracts require Linux Bash semantics",
+)
 
 
 def _server_root() -> Path:
     """Return the checked-out server repository used by external tests."""
-    return (
-        Path(__file__).resolve().parents[3]
-        / "MasterplanOptimiserV3 - Server"
-        / "MasterplanOptimiserV3---Server"
-    )
+    return server_root()
 
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -36,8 +41,22 @@ def test_operator_scripts_are_executable_and_existing_users_gain_docker_access()
         root / "deploy" / "setup-server.sh",
         *(root / "deploy" / "management").glob("*.sh"),
     ]
-    for script_path in scripts:
-        assert script_path.stat().st_mode & stat.S_IXUSR, script_path
+    relative_scripts = [script_path.relative_to(root).as_posix() for script_path in scripts]
+    staged = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--stage", "--", *relative_scripts],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    staged_modes = {
+        path: mode
+        for line in staged.stdout.splitlines()
+        for mode, _object_id, _stage, path in [line.split(maxsplit=3)]
+    }
+    for relative_path, script_path in zip(relative_scripts, scripts, strict=True):
+        assert staged_modes.get(relative_path) == "100755", script_path
+        if os.name != "nt":
+            assert script_path.stat().st_mode & stat.S_IXUSR, script_path
 
     setup = (root / "deploy" / "setup-server.sh").read_text(encoding="utf-8")
     assert "usermod -aG docker deploy" in setup
@@ -108,6 +127,17 @@ def test_snapshot_only_captures_host_caddy_for_host_topology(tmp_path: Path):
     (installation / "infra").mkdir()
     (installation / ".env").write_text("DOMAIN=example.test\n", encoding="utf-8")
     (installation / "secrets" / "secret_key").write_text("secret", encoding="utf-8")
+    evidence = installation / "state" / "evidence"
+    (evidence / "ledger").mkdir(parents=True)
+    (evidence / "public").mkdir()
+    (evidence / "ledger" / "chain-head.json").write_text(
+        '{"head_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}\n',
+        encoding="utf-8",
+    )
+    (evidence / "public" / "instance_signing_key.pub").write_text(
+        "ssh-ed25519 synthetic-test-key\n",
+        encoding="utf-8",
+    )
     host_caddy = tmp_path / "Caddyfile"
     host_caddy.write_text("example.test { respond ok }\n", encoding="utf-8")
     common = root / "deploy" / "management" / "common.sh"
@@ -118,6 +148,8 @@ def test_snapshot_only_captures_host_caddy_for_host_topology(tmp_path: Path):
         command = (
             f'source "{common}"; source "{snapshots}"; '
             f'mp_caddy_mode() {{ printf "{topology}\\n"; }}; '
+            'sudo() { [ "$1" != "-n" ] || shift; '
+            '[ "$1" != "chown" ] || return 0; "$@"; }; '
             f'mp_snapshot_copy_configuration "{payload}" yes'
         )
         result = _run_bash(
@@ -132,6 +164,10 @@ def test_snapshot_only_captures_host_caddy_for_host_topology(tmp_path: Path):
         assert (payload / "metadata" / "caddy-topology").read_text(
             encoding="utf-8",
         ).strip() == topology
+        assert (payload / "evidence" / "ledger" / "chain-head.json").is_file()
+        assert (
+            payload / "evidence" / "public" / "instance_signing_key.pub"
+        ).is_file()
 
 
 def test_base_schema_bootstrap_skips_existing_and_starts_blank_database(tmp_path: Path):

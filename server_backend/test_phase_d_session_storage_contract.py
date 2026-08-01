@@ -5,17 +5,18 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import pytest
+
+from repo_roots import optional_docs_root, server_root
 
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-DOCS_ROOT = Path(os.environ.get(
-    "MP_OPT_DOCS_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info",
-))
+SERVER_ROOT = server_root()
+DOCS_ROOT = optional_docs_root()
+project_site_required = pytest.mark.skipif(
+    DOCS_ROOT is None,
+    reason="project-site contracts require an explicit valid MP_OPT_DOCS_ROOT",
+)
 CONTRACT_PATH = SERVER_ROOT / "deploy" / "security" / "session_storage_contract.json"
 
 
@@ -112,6 +113,7 @@ def test_each_supported_browser_store_has_bounded_lifecycle_and_regression_evide
     assert "cache.put(event.request" not in worker
 
 
+@project_site_required
 def test_public_disclosures_match_application_control_and_external_boundaries():
     contract = _contract()
     security_page = (

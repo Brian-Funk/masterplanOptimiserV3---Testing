@@ -6,20 +6,12 @@ import os
 from pathlib import Path
 import tomllib
 
+from repo_roots import app_root, server_root
+
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
-DOCS_ROOT = Path(os.environ.get(
-    "MP_OPT_DOCS_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info",
-))
+SERVER_ROOT = server_root()
+APP_ROOT = app_root()
 TESTING_ROOT = Path(__file__).resolve().parents[1]
 AGPL_SHA256 = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
 
@@ -34,7 +26,7 @@ def _json(path: Path):
 
 
 def test_all_publication_repositories_use_exact_agpl_and_spdx_metadata():
-    for root in (SERVER_ROOT, APP_ROOT, TESTING_ROOT, DOCS_ROOT):
+    for root in (SERVER_ROOT, APP_ROOT, TESTING_ROOT):
         assert _normalised_sha(root / "LICENSE") == AGPL_SHA256
         for required in (
             "BRANDING.md",
@@ -53,7 +45,6 @@ def test_all_publication_repositories_use_exact_agpl_and_spdx_metadata():
         APP_ROOT / "web/package.json",
         APP_ROOT / "desktop/package.json",
         TESTING_ROOT / "package.json",
-        DOCS_ROOT / "package.json",
     ):
         assert _json(path)["license"] == "AGPL-3.0-only"
 
@@ -68,7 +59,6 @@ def test_generated_notices_cover_locked_dependencies_and_in_app_copies():
     assert server_notice.count(b"\n|") > 700
     assert app_notice.count(b"\n|") > 650
     assert (TESTING_ROOT / "THIRD-PARTY-NOTICES.md").read_bytes().count(b"\n|") > 200
-    assert (DOCS_ROOT / "THIRD-PARTY-NOTICES.md").read_bytes().count(b"\n|") > 400
 
 
 def test_corresponding_source_is_exact_and_modified_builds_are_supported():
@@ -87,8 +77,8 @@ def test_corresponding_source_is_exact_and_modified_builds_are_supported():
 
     server_release = (SERVER_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     app_release = (APP_ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
-    assert "MP_PUBLIC_SOURCE_REVISION: ${{ github.sha }}" in server_release
-    assert "MP_PUBLIC_SOURCE_REVISION: ${{ github.sha }}" in app_release
+    assert "MP_PUBLIC_SOURCE_REVISION: ${{ steps.release.outputs.release_commit }}" in server_release
+    assert "MP_PUBLIC_SOURCE_REVISION: ${{ needs.preflight.outputs.release_commit || github.sha }}" in app_release
     assert "Corresponding source" in (APP_ROOT / "web/src/app/dashboard/layout.tsx").read_text(encoding="utf-8")
 
 
@@ -115,7 +105,7 @@ def test_private_notes_are_absent_and_fresh_history_is_mandatory():
 
 
 def test_branding_is_separate_and_provenance_stays_explicitly_human_gated():
-    for root in (SERVER_ROOT, APP_ROOT, TESTING_ROOT, DOCS_ROOT):
+    for root in (SERVER_ROOT, APP_ROOT, TESTING_ROOT):
         branding = (root / "BRANDING.md").read_text(encoding="utf-8")
         provenance = (root / "COPYRIGHT-AND-CONTRIBUTION-PROVENANCE.md").read_text(encoding="utf-8")
         assert "separate from the GNU Affero General Public License" in branding

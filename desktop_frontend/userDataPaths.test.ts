@@ -6,18 +6,12 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveAppRoot } from "../test_support/repoRoots";
 
 const require = createRequire(import.meta.url);
+const desktopRoot = path.join(resolveAppRoot(), "desktop");
 const userDataPaths = require(
-  path.resolve(
-    process.cwd(),
-    "..",
-    "..",
-    "MasterplanOptimiserV3 - App",
-    "masterplanOptimiserV3 - App",
-    "desktop",
-    "user-data-paths.js",
-  ),
+  path.join(desktopRoot, "user-data-paths.js"),
 );
 
 const {
@@ -27,15 +21,7 @@ const {
   resolveDesktopDataPaths,
 } = userDataPaths;
 const { resolveDesktopRuntimeConfig } = require(
-  path.resolve(
-    process.cwd(),
-    "..",
-    "..",
-    "MasterplanOptimiserV3 - App",
-    "masterplanOptimiserV3 - App",
-    "desktop",
-    "runtime-config.js",
-  ),
+  path.join(desktopRoot, "runtime-config.js"),
 );
 
 function makeTempRoot() {

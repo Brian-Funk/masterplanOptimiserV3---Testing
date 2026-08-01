@@ -4,24 +4,25 @@ import json
 import os
 from pathlib import Path
 import re
+import pytest
 
 from server_backend.conftest import app
+from repo_roots import app_root, optional_docs_root, server_root
 
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
-DOCS_ROOT = Path(os.environ.get(
-    "MP_OPT_DOCS_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info",
-))
-MANIFEST_PATH = DOCS_ROOT / "docs/compliance/inventory-manifest.json"
+SERVER_ROOT = server_root()
+APP_ROOT = app_root()
+DOCS_ROOT = optional_docs_root()
+pytestmark = pytest.mark.skipif(
+    DOCS_ROOT is None,
+    reason="project-site contracts require an explicit valid MP_OPT_DOCS_ROOT",
+)
+MANIFEST_PATH = (
+    DOCS_ROOT / "docs/compliance/inventory-manifest.json"
+    if DOCS_ROOT is not None
+    else Path("project-site-not-configured")
+)
 FIXTURE_PATH = Path(__file__).parent / "fixtures/phase7_evidence_receipt.json"
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 

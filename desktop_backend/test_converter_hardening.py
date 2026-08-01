@@ -9,12 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from repo_roots import app_root
 
-_APP_ROOT = (
-    Path(__file__).resolve().parents[3]
-    / "MasterplanOptimiserV3 - App"
-    / "masterplanOptimiserV3 - App"
-)
+_APP_ROOT = app_root()
 
 
 def _converter_module():

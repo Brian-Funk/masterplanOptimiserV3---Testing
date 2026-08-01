@@ -18,27 +18,23 @@ from app.core.config import settings
 from app.core.governance_rendering import build_publication_payload, governance_preflight
 from app.models.governance import GovernancePublication, InstanceGovernanceProfile
 from server_backend.conftest import app
+from repo_roots import app_root, optional_docs_root, server_root
 
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
-DOCS_ROOT = Path(os.environ.get(
-    "MP_OPT_DOCS_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info",
-))
+SERVER_ROOT = server_root()
+APP_ROOT = app_root()
+DOCS_ROOT = optional_docs_root()
 TESTING_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 CLAIM_FIXTURE = FIXTURE_ROOT / "phase_b_claims.json"
 SNAPSHOT_PATH = FIXTURE_ROOT / "phase_b_governance_snapshot.json"
 SERVER_POLICY = SERVER_ROOT / "deploy/security/legal_claim_rules.json"
-DOCS_POLICY = DOCS_ROOT / "docs/compliance/legal-claim-rules.json"
+DOCS_POLICY = (
+    DOCS_ROOT / "docs/compliance/legal-claim-rules.json"
+    if DOCS_ROOT is not None
+    else None
+)
 SECURITY_TOOLS = SERVER_ROOT / "deploy/security"
 if str(SECURITY_TOOLS) not in sys.path:
     sys.path.insert(0, str(SECURITY_TOOLS))
@@ -190,29 +186,33 @@ def _expected_codes(features: dict[str, object]) -> list[str]:
 
 
 def test_shared_claim_policy_and_fixture_corpus_fail_closed():
-    assert _json(SERVER_POLICY) == _json(DOCS_POLICY)
+    if DOCS_POLICY is not None:
+        assert _json(SERVER_POLICY) == _json(DOCS_POLICY)
     policy = load_policy(SERVER_POLICY)
     assert verify_fixture(CLAIM_FIXTURE, policy) == []
     fixture = _json(CLAIM_FIXTURE)
     for item in fixture["unsafe"]:
         assert item["rule_id"] in {finding["rule_id"] for finding in scan_text(item["text"], policy)}
-    completed = subprocess.run(
-        ["node", "scripts/check-legal-claims.mjs", "--fixture", str(CLAIM_FIXTURE)],
-        cwd=DOCS_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
+    if DOCS_ROOT is not None:
+        completed = subprocess.run(
+            ["node", "scripts/check-legal-claims.mjs", "--fixture", str(CLAIM_FIXTURE)],
+            cwd=DOCS_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
 
 
 def test_current_public_outputs_pass_the_shared_claim_policy():
-    for root, profile in (
+    roots = [
         (SERVER_ROOT, "server"),
         (APP_ROOT, "app"),
         (TESTING_ROOT, "testing"),
-        (DOCS_ROOT, "docs"),
-    ):
+    ]
+    if DOCS_ROOT is not None:
+        roots.append((DOCS_ROOT, "docs"))
+    for root, profile in roots:
         assert audit_public_claims(root, profile, SERVER_POLICY) == [], profile
 
 

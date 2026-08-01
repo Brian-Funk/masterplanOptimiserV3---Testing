@@ -8,13 +8,10 @@ from app.core import retention
 from app.models.deletion import DeletionCase, DesktopDeletionWorkOrder
 from app.models.server_setting import ServerSetting
 from server_backend.conftest import create_test_event
+from repo_roots import app_root
 
 
-EYP_ROOT = Path(__file__).resolve().parents[3]
-APP_ROOT = Path(os.environ.get(
-    "MP_OPT_APP_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - App" / "masterplanOptimiserV3 - App",
-))
+APP_ROOT = app_root()
 
 
 def _unsigned_case_stub(db, event, **kwargs):

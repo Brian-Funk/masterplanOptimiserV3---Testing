@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import pytest
+
+from repo_roots import optional_docs_root, server_root
 
 
 EYP_ROOT = Path(__file__).resolve().parents[3]
-SERVER_ROOT = Path(os.environ.get(
-    "MP_OPT_SERVER_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Server" / "MasterplanOptimiserV3---Server",
-))
-DOCS_ROOT = Path(os.environ.get(
-    "MP_OPT_DOCS_ROOT",
-    EYP_ROOT / "MasterplanOptimiserV3 - Docs" / "mp-opt-info",
-))
+SERVER_ROOT = server_root()
+DOCS_ROOT = optional_docs_root()
+project_site_required = pytest.mark.skipif(
+    DOCS_ROOT is None,
+    reason="project-site contracts require an explicit valid MP_OPT_DOCS_ROOT",
+)
 
 
 def test_bundle_first_integrated_uploader_interfaces_are_complete():
@@ -97,6 +98,7 @@ def test_synthetic_regressions_cover_token_secrecy_retry_and_portable_tamper():
         assert case in tests
 
 
+@project_site_required
 def test_public_documentation_states_custody_permissions_and_verification_limits():
     server_doc = (
         SERVER_ROOT / "docs/evidence/controller-evidence-git.md"

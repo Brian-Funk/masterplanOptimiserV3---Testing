@@ -43,6 +43,10 @@ def test_plan_covers_every_phase_f_lane_and_boundary() -> None:
         "verified restore", "account deletion", "event deletion", "evidence export",
         "temporary evidence Git import", "human-readable summary", "converter dry run",
         "conversion", "semantic comparison", "rollback", "no Desktop integration",
+        "exactly-once instance key", "root passkey exact action",
+        "controller external custody", "Desktop processor-only key generation",
+        "OS credential custody", "controller exclusion", "HA fingerprint continuity",
+        "governance trust gate",
     ):
         assert required in coverage
     exclusions = "\n".join(plan["exclusions"])
@@ -51,6 +55,9 @@ def test_plan_covers_every_phase_f_lane_and_boundary() -> None:
         "converter UI or user-facing import flow", "dual-read or dual-write behaviour",
         "legacy-data synchronisation", "ongoing legacy-format support",
         "protected data or live backups", "deployment or release",
+        "real controller or processor key ceremony",
+        "controller or processor private keys in Server",
+        "writes to Evidence or Evidence-Public",
     ):
         assert prohibited in exclusions
 
@@ -68,6 +75,13 @@ def test_phase_f_sources_are_separate_and_documented() -> None:
     public_doc = (
         DOCS_ROOT / "src" / "app" / "docs" / "desktop" / "import-export" / "page.tsx"
     ).read_text(encoding="utf-8")
+    desktop_core = (APP_ROOT / "backend" / "app" / "core" / "operator_evidence.py").read_text(
+        encoding="utf-8"
+    )
+    server_trust = (SERVER_ROOT / "backend" / "app" / "api" / "v1" / "evidence_keys.py").read_text(
+        encoding="utf-8"
+    )
+    key_doc = (SERVER_ROOT / "docs" / "key-custody-and-trust.md").read_text(encoding="utf-8")
 
     assert 'OPERATOR_TOOL_SCOPE = "separate-temporary-one-time-converter"' in converter
     assert "def dry_run(" in converter and "def rollback(" in converter
@@ -77,6 +91,12 @@ def test_phase_f_sources_are_separate_and_documented() -> None:
         assert "startup migration" in document
         assert "dual-read" in document
         assert "ongoing" in document and "format" in document
+    assert 'PROCESSOR_ROLE = "processor"' in desktop_core
+    assert "generate_key" in desktop_core and '"controller"' not in desktop_core
+    assert "root-authorisation/complete" in server_trust
+    assert "possession_proof_sha256" in server_trust
+    for role in ("instance", "root_passkey", "controller", "processor"):
+        assert f"`{role}`" in key_doc
 
 
 def test_runner_records_exact_repositories_and_lane_results(tmp_path, monkeypatch) -> None:

@@ -1,7 +1,8 @@
-"""Independent cross-repository contracts for Phase 4 signed evidence."""
+"""Independent cross-repository contracts for role-separated signed evidence."""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -12,8 +13,7 @@ import textwrap
 import pytest
 
 from app.core.operator_evidence import (
-    GIT_ANCHOR_ROLES,
-    OPERATOR_NAMESPACE,
+    TRUST_NAMESPACE,
     key_id,
     validate_registration_document,
     verify_signature,
@@ -31,60 +31,63 @@ SERVER_ROOT = Path(os.environ.get(
 ))
 
 
-def _desktop_package(app_root: Path) -> dict:
+def _processor_package(app_root: Path) -> dict:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     script = textwrap.dedent(
-        """
+        f"""
         import base64
-        from datetime import datetime, timedelta, timezone
+        import hashlib
         import json
         import uuid
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
-        from app.core.operator_evidence import generate_key, sign_document
+        from app.core.operator_evidence import action_payload, canonical_json, generate_key, sign_document
         from app.core.secure_credentials import set_credential_store_for_tests
-        from app.db.database import Base
-        from app.models.operator_evidence import OperatorEvidenceKey
+        from app.models.operator_evidence import ProcessorEvidenceKey
 
         class MemoryStore:
-            def __init__(self): self.values = {}
+            def __init__(self): self.values = {{}}
             def available(self): return True
             def get(self, account): return self.values.get(account)
             def set(self, account, value): self.values[account] = value
             def delete(self, account): self.values.pop(account, None)
 
         engine = create_engine('sqlite:///:memory:')
-        OperatorEvidenceKey.__table__.create(bind=engine)
+        ProcessorEvidenceKey.__table__.create(bind=engine)
         db = sessionmaker(bind=engine)()
         store = MemoryStore()
         set_credential_store_for_tests(store)
-        row = generate_key(db, role='desktop_operator')
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        challenge = {
-            'format': 'mp-opt-operator-key-registration-v1',
+        row = generate_key(db, processor_id='prc-syntheticprocessor')
+        challenge = {{
+            'format': 'mp-opt-trust-key-registration-v1',
             'challenge_id': str(uuid.uuid4()),
-            'purpose': 'register',
+            'action': 'register',
             'instance_id': str(uuid.uuid4()),
+            'entity_id': row.processor_id,
             'key_id': row.key_id,
+            'role': 'processor',
+            'algorithm': 'Ed25519',
             'public_key_sha256': row.public_key_sha256,
-            'role': row.role,
             'supersedes_key_id': None,
-            'rotation_reason': None,
+            'reason': None,
+            'action_sha256': '',
             'nonce': base64.b64encode(b'x' * 32).decode('ascii'),
-            'created_at': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'expires_at': (now + timedelta(minutes=10)).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        }
+            'created_at': '{now.strftime('%Y-%m-%dT%H:%M:%SZ')}',
+            'expires_at': '{(now + timedelta(minutes=10)).strftime('%Y-%m-%dT%H:%M:%SZ')}',
+        }}
+        challenge['action_sha256'] = hashlib.sha256(canonical_json(action_payload(challenge))).hexdigest()
         proof = sign_document(db, identifier=row.key_id, document=challenge, kind='registration')
-        print(json.dumps({
+        print(json.dumps({{
             'public_key': row.public_key,
             'key_id': row.key_id,
             'challenge': challenge,
             'proof': proof,
-            'sqlite_columns': [column.name for column in OperatorEvidenceKey.__table__.columns],
+            'sqlite_columns': [column.name for column in ProcessorEvidenceKey.__table__.columns],
             'keyring_accounts': sorted(store.values),
-            'private_marker_in_output': 'PRIVATE KEY' in json.dumps({
+            'private_marker_in_output': 'PRIVATE KEY' in json.dumps({{
                 'public_key': row.public_key, 'challenge': challenge, 'proof': proof,
-            }),
-        }, sort_keys=True))
+            }}),
+        }}, sort_keys=True))
         """
     )
     result = subprocess.run(
@@ -98,40 +101,46 @@ def _desktop_package(app_root: Path) -> dict:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
-def test_desktop_generated_proof_matches_server_protocol_without_private_key_transfer():
-    package = _desktop_package(APP_ROOT)
+def test_desktop_processor_proof_matches_server_protocol_without_private_key_transfer():
+    package = _processor_package(APP_ROOT)
 
     validate_registration_document(package["challenge"])
     digest = verify_signature(package["challenge"], package["proof"], package["public_key"])
 
     assert len(digest) == 64
     assert package["key_id"] == key_id(package["public_key"])
-    assert package["proof"]["namespace"] == OPERATOR_NAMESPACE
+    assert package["proof"]["namespace"] == TRUST_NAMESPACE
+    assert package["challenge"]["role"] == "processor"
     assert package["private_marker_in_output"] is False
     assert all("private" not in column for column in package["sqlite_columns"])
     assert package["keyring_accounts"] == [
-        f"masterplan:evidence-key:{package['key_id']}:private-ed25519-pkcs8"
+        f"masterplan:processor-key:{package['key_id']}:private-ed25519-pkcs8"
     ]
 
 
-def test_git_anchor_role_scope_is_identical_across_server_desktop_and_repository_helper():
-    desktop_source = (APP_ROOT / "backend/app/core/operator_evidence.py").read_text(encoding="utf-8")
-    repository_source = (SERVER_ROOT / "deploy/evidence/evidence_repository.py").read_text(encoding="utf-8")
+def test_git_anchor_is_controller_only_and_has_no_generic_operator_interface():
+    repository_source = (
+        SERVER_ROOT / "deploy/evidence/evidence_repository.py"
+    ).read_text(encoding="utf-8")
+    helper_source = (
+        SERVER_ROOT / "deploy/evidence/evidence_repo.py"
+    ).read_text(encoding="utf-8")
 
-    assert GIT_ANCHOR_ROLES == {"controller", "root_operator", "evidence_auditor"}
-    for role in GIT_ANCHOR_ROLES:
-        assert role in desktop_source
-        assert role in repository_source
-    assert 'GIT_ANCHOR_ROLES = frozenset({"controller", "root_operator", "evidence_auditor"})' in desktop_source
-    assert 'ALLOWED_OPERATOR_ROLES = {"controller", "root_operator", "evidence_auditor"}' in repository_source
+    assert 'CONTROLLER_ROLE = "controller"' in repository_source
+    assert 'ANCHOR_FORMAT = "mp-opt-git-anchor-v2"' in repository_source
+    assert '"controller_key_id": controller_key_id' in repository_source
+    assert '"controller_role": CONTROLLER_ROLE' in repository_source
+    assert "--controller-key-id" in repository_source and "--controller-key-id" in helper_source
+    for forbidden in ("ALLOWED_OPERATOR_ROLES", "--operator-key-id", "--operator-role"):
+        assert forbidden not in repository_source
+        assert forbidden not in helper_source
 
 
-def test_private_repository_ci_and_workstation_commands_cover_every_phase4_boundary():
+def test_private_repository_ci_and_workstation_commands_cover_archive_boundary():
     workflow = (
         SERVER_ROOT / "deploy/evidence/repository-template/.github/workflows/verify-evidence.yml"
     ).read_text(encoding="utf-8")
     helper = (SERVER_ROOT / "deploy/evidence/evidence_repo.py").read_text(encoding="utf-8")
-    api = (SERVER_ROOT / "backend/app/api/v1/evidence_keys.py").read_text(encoding="utf-8")
 
     assert "push:" in workflow and "pull_request:" in workflow
     assert "verify --archive ." in workflow
@@ -139,8 +148,7 @@ def test_private_repository_ci_and_workstation_commands_cover_every_phase4_bound
         assert f'add_parser("{command}")' in helper
     assert '"commit", "-S"' in helper
     assert "--force" not in helper
-    assert "git-anchors/import" in api
-    assert "private_key" not in api
+    assert "private_key" not in helper
 
 
 @pytest.mark.parametrize("forbidden", ["person_name", "email", "task_title", "schedule_data", "private_key"])

@@ -72,6 +72,14 @@ class FakeAsyncClient:
                     "unsupported": ["health", "unrelated private information"],
                 },
             })
+        if url.endswith("/api/v1/publish/processor-policy-acknowledgements/current"):
+            return FakeMpBackendResponse({
+                "acknowledged": True,
+                "policy_version": self.policy_version,
+                "policy_sha256": self.policy_sha256,
+                "key_id": "ek-test-processor",
+                "document_sha256": "c" * 64,
+            })
         return FakeMpBackendResponse({
             "status": "ok",
             "event_name": "Publish Event",
@@ -93,6 +101,8 @@ def acknowledge_current_policy(db, event_id):
             "policy_version": 7,
             "policy_sha256": "a" * 64,
             "operator_subject": "b" * 64,
+            "key_id": "ek-test-processor",
+            "document_sha256": "c" * 64,
             "acknowledged_at": "2026-07-30T12:00:00+00:00",
         }),
     )

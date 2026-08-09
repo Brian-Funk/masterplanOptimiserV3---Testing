@@ -271,11 +271,11 @@ def test_mp_backend_policy_supersession_invalidates_local_acknowledgement(
     assert FakeAsyncClient.captured_payloads == []
 
 
-def test_mp_backend_publish_blocks_unreviewed_legacy_template_field(
+def test_mp_backend_publish_derives_authenticated_metadata_for_existing_template_field(
     db, client, monkeypatch, secure_credential_store
 ):
-    """Legacy free-form fields remain local until an operator classifies them."""
-    event = create_test_event(db, name="Legacy classification")
+    """Existing operational fields publish without a redundant per-field review."""
+    event = create_test_event(db, name="Automatic classification")
     configure_mp_backend(event, secure_credential_store)
     task_type = create_test_task_type(db)
     template = TaskTemplate(
@@ -290,8 +290,8 @@ def test_mp_backend_publish_blocks_unreviewed_legacy_template_field(
         event_id=event.id,
         task_type_id=task_type.id,
         task_template_id=template.id,
-        title="Legacy task",
-        constraints={"field_values": {"notes": "private note"}},
+        title="Operational task",
+        constraints={"field_values": {"notes": "arrival instructions"}},
         optimised={"start_time": 600, "end_time": 660, "location": None},
         final={"start_time": 600, "end_time": 660, "location": None},
         additional={"date": "2026-08-01"},
@@ -307,9 +307,17 @@ def test_mp_backend_publish_blocks_unreviewed_legacy_template_field(
 
     response = client.post(f"/api/v1/mp-backend/publish/{event.id}", json={})
 
-    assert response.status_code == 409
-    assert "reviewed" in response.json()["detail"]
-    assert FakeAsyncClient.captured_payloads == []
+    assert response.status_code == 200, response.text
+    payload = FakeAsyncClient.captured_payloads[0]
+    published_task = payload["tasks"][0]
+    assert published_task["field_definitions"] == [{
+        "id": "notes",
+        "name": "Notes",
+        "type": "text",
+        "purpose": "operational_instruction",
+        "visibility": "participant",
+    }]
+    assert published_task["field_values"] == {"notes": "arrival instructions"}
 
 
 def test_mp_backend_publish_without_dates_sends_all_tasks(

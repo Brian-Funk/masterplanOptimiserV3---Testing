@@ -21,13 +21,18 @@ describe("desktop processor evidence custody", () => {
     expect(settings).toContain("One processor identity is bound to");
     expect(settings).toContain("Generate on this Desktop");
     expect(settings).toContain("Import an encrypted key");
-    expect(settings).toContain("listKeys(selectedEventId)");
+    // The reset screen must include stale local keys so a previous enrolment can
+    // be erased completely before a fresh processor identity is created.
+    expect(settings).toContain("listKeys(selectedEventId, true)");
+    expect(settings).toContain("eraseEventKeys(selectedEventId)");
     expect(settings).toContain("enrolKey(selectedEventId");
     expect(settings).not.toContain('sign("registration")');
     expect(settings).not.toContain('sign("statement")');
     expect(api).toContain("/api/v1/processor-evidence/keys");
     expect(api).toContain("/enrol");
     expect(api).toContain("/refresh-status");
+    expect(api).toContain('include_stale=${includeStale ? "true" : "false"}');
+    expect(api).toContain("ERASE LOCAL PROCESSOR KEYS");
   });
 
   it("keeps SQLite metadata public-only and the private key in the keyring boundary", () => {
